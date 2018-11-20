@@ -11,6 +11,8 @@ Refer to research [Embedding-based News Recommendation for Millions of Users](ht
 ---
 Quick start
 
+Python version = 3.6.7
+
 ```shell
 python main.py --model dae_triplet --model_name dae_triplet --main_dir dae_triplet 
 ```
