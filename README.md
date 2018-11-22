@@ -17,3 +17,5 @@ Python version = 3.6.7
 python main.py --model dae_triplet --model_name dae_triplet --main_dir dae_triplet 
 ```
 
+---
+The autoencoder is modified based on git repo of [blackecho](https://gist.github.com/blackecho/3a6e4d512d3aa8aa6cf9) and [Leavingseason](https://github.com/Leavingseason/rnn_recsys)
