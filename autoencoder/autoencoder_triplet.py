@@ -1,10 +1,14 @@
 import tensorflow as tf
-import numpy as np
-import os
+import numpy as np, os
+from pathlib import Path
 
-import zconfig
-import utils
-from autoencoder import DenoisingAutoencoder
+from . import utils
+from .autoencoder import DenoisingAutoencoder
+
+
+# Define path
+_script_path = Path(os.path.dirname(os.path.realpath(__file__)))
+
 
 class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
 
@@ -12,10 +16,10 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
     The interface of the class is sklearn-like.
     """
 
-    def __init__(self, model_name='dae_triplet', n_components=256, main_dir='dae/', enc_act_func='tanh',
-                 dec_act_func='none', loss_func='mean_squared', num_epochs=10, batch_size=10, dataset='mnist',
+    def __init__(self, model_name='dae_triplet', compress_factor=10, main_dir='dae_triplet/', enc_act_func='tanh',
+                 dec_act_func='none', loss_func='mean_squared', num_epochs=10, batch_size=10,
                  xavier_init=1, opt='gradient_descent', learning_rate=0.01, momentum=0.5, corr_type='none',
-                 corr_frac=0., verbose=1, seed=-1, alpha=1):
+                 corr_frac=0., verbose=True, seed=-1, alpha=1):
         """
         :param alpha:
         :param refer to class DenoisingAutoencoder
@@ -29,8 +33,8 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
         self.input_data_neg = None
         self.input_data_corr_neg = None
 
-        super().__init__(model_name, n_components, main_dir, enc_act_func,
-                         dec_act_func, loss_func, num_epochs, batch_size, dataset,
+        super().__init__(model_name, compress_factor, main_dir, enc_act_func,
+                         dec_act_func, loss_func, num_epochs, batch_size,
                          xavier_init, opt, learning_rate, momentum, corr_type,
                          corr_frac, verbose, seed)
 
@@ -59,6 +63,7 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
 
         n_features = train_set['org'].shape[1]
         self.sparse_input = False if isinstance(train_set['org'],np.ndarray) else True
+        self.n_components = np.floor(n_features / self.compress_factor).astype(int)
 
         self._build_model(n_features)
 
@@ -66,7 +71,7 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
 
             self._initialize_tf_utilities_and_ops(restore_previous_model)
             self._train_model(train_set, validation_set)
-            self.tf_saver.save(self.tf_session, self.models_dir + self.model_name)
+            self.tf_saver.save(self.tf_session, self.models_dir + self.model_name) #todo: should save to another model_name if model already exists?
 
     def _initialize_tf_utilities_and_ops(self, restore_previous_model):
 

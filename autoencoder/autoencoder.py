@@ -1,9 +1,14 @@
 import tensorflow as tf
 import numpy as np
 import os
+from pathlib import Path
 
-import zconfig
-import utils
+from . import utils
+
+
+# Define path
+_script_path = Path(os.path.dirname(os.path.realpath(__file__)))
+
 
 class DenoisingAutoencoder(object):
 
@@ -11,13 +16,13 @@ class DenoisingAutoencoder(object):
     The interface of the class is sklearn-like.
     """
 
-    def __init__(self, model_name='dae', n_components=256, main_dir='dae/', enc_act_func='tanh',
-                 dec_act_func='none', loss_func='mean_squared', num_epochs=10, batch_size=10, dataset='mnist',
+    def __init__(self, model_name='dae', compress_factor=10, main_dir='dae/', enc_act_func='tanh',
+                 dec_act_func='none', loss_func='mean_squared', num_epochs=10, batch_size=10,
                  xavier_init=1, opt='gradient_descent', learning_rate=0.01, momentum=0.5, corr_type='none',
-                 corr_frac=0., verbose=1, seed=-1):
+                 corr_frac=0., verbose=True, seed=-1):
         """
         :param main_dir: main directory to put the models, data and summary directories
-        :param n_components: number of hidden units
+        :param compress_factor: number of hidden units = (input features divided by compress factor)
         :param enc_act_func: Activation function for the encoder. ['tanh', 'sigmoid']
         :param dec_act_func: Activation function for the decoder. ['tanh', 'sigmoid']
         :param loss_func: Loss function. ['mean_squared', 'cross_entropy']
@@ -27,22 +32,20 @@ class DenoisingAutoencoder(object):
         :param momentum: Momentum parameter
         :param corr_type: Type of input corruption. ["none", "masking", "salt_and_pepper", "decay]
         :param corr_frac: Fraction of the input to corrupt.
-        :param verbose: Level of verbosity. 0 - silent, 1 - print accuracy.
+        :param verbose: Level of verbosity. False - silent, True - print accuracy.
         :param num_epochs: Number of epochs
         :param batch_size: Size of each mini-batch
-        :param dataset: Optional name for the dataset.
         :param seed: positive integer for seeding random generators. Ignored if < 0.
         """
 
         self.model_name = model_name
-        self.n_components = n_components
+        self.compress_factor = compress_factor
         self.main_dir = main_dir
         self.enc_act_func = enc_act_func
         self.dec_act_func = dec_act_func
         self.loss_func = loss_func
         self.num_epochs = num_epochs
         self.batch_size = batch_size
-        self.dataset = dataset
         self.xavier_init = xavier_init
         self.opt = opt
         self.learning_rate = learning_rate
@@ -93,6 +96,7 @@ class DenoisingAutoencoder(object):
 
         n_features = train_set.shape[1]
         self.sparse_input = False if isinstance(train_set,np.ndarray) else True
+        self.n_components = np.floor(n_features / self.compress_factor).astype(int)
 
         self._build_model(n_features)
 
@@ -207,7 +211,7 @@ class DenoisingAutoencoder(object):
 
         self.tf_summary_writer.add_summary(summary_str, epoch)
 
-        if self.verbose == 1:
+        if self.verbose:
             print("Validation cost at step %s: %s" % (epoch, err))
 
     def _build_model(self, n_features):
@@ -406,9 +410,9 @@ class DenoisingAutoencoder(object):
 
         self.main_dir = self.main_dir + '/' if self.main_dir[-1] != '/' else self.main_dir
 
-        models_dir = zconfig.models_dir + self.main_dir
-        data_dir = zconfig.data_dir + self.main_dir
-        summary_dir = zconfig.summary_dir + self.main_dir
+        models_dir = 'results/' + self.main_dir + 'models/'
+        data_dir = 'results/' + self.main_dir + 'data/'
+        summary_dir = 'results/' + self.main_dir + 'logs/'
 
         for d in [models_dir, data_dir, summary_dir]:
             if not os.path.isdir(d):

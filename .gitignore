@@ -1,5 +1,6 @@
 _temp.py
 MNIST_data
-data
-logs
-models
+autoencoder/data
+autoencoder/logs
+autoencoder/models
+results

@@ -1,6 +1,11 @@
 from scipy import misc
 import tensorflow as tf
-import numpy as np
+import numpy as np, os
+from pathlib import Path
+
+
+# Define path
+_script_path = Path(os.path.dirname(os.path.realpath(__file__)))
 
 
 # ############# #
