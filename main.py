@@ -1,4 +1,4 @@
-import tensorflow as tf, os, scipy.sparse as sparse, pandas as pd
+import tensorflow as tf, os, scipy.sparse as sparse, pandas as pd, numpy as np
 import autoencoder.autoencoder_triplet as autoencoder_triplet
 import datasets.articles as articles
 from pathlib import Path
@@ -29,8 +29,8 @@ flags.DEFINE_string('model_name', '', 'Model name.')
 flags.DEFINE_boolean('restore_previous_model', False, 'If true, restore previous model corresponding to model name')
 flags.DEFINE_integer('seed', -1, 'Seed for the random generators (>= 0). Useful for testing hyperparameters')
 flags.DEFINE_integer('compress_factor', 10, 'Compression factor to determine num. of hidder nodes')
-flags.DEFINE_string('corr_type', 'none', 'Type of input corruption. ["none", "masking", "salt_and_pepper", "decay]')
-flags.DEFINE_float('corr_frac', 0., 'Fraction of the input to corrupt.')
+flags.DEFINE_string('corr_type', 'masking', 'Type of input corruption. ["none", "masking", "salt_and_pepper", "decay]')
+flags.DEFINE_float('corr_frac', 0.3, 'Fraction of the input to corrupt.')
 flags.DEFINE_integer('xavier_init', 1, 'Value for the constant in xavier weights initialization.')
 flags.DEFINE_string('enc_act_func', 'sigmoid', 'Activation function for the encoder. ["sigmoid", "tanh"]')
 flags.DEFINE_string('dec_act_func', 'sigmoid', 'Activation function for the decoder. ["sigmoid", "tanh", "none"]')
@@ -76,7 +76,7 @@ if __name__ == '__main__':
         X_pos = sparse.load_npz(model.data_dir + 'article_contents_vectorized_pos.npz')
         X_neg = sparse.load_npz(model.data_dir + 'article_contents_vectorized_neg.npz')
     else:
-        article_contents = articles.read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/latest.snappy.parquet',save_path=None,id_colname='article_id',cate_colname='main_category_id')
+        article_contents = articles.read_articles(path='/Users/kitlunglaw/Documents/HK01/cache/s3/article_contents',save_path=None,id_colname='article_id',cate_colname='main_category_id')
         row = 1000
         count_vectorizer, X, X_pos, X_neg = articles.count_vectorize(
             article_contents[article_contents.valid_triplet_data == 1].main_content[0:row],
@@ -85,6 +85,7 @@ if __name__ == '__main__':
             min_df=FLAGS.min_df,
             max_df=FLAGS.max_df,
             max_features=FLAGS.max_features,
+            binary=True
         )
 
     trX = {'org': X[:-100],
@@ -109,9 +110,11 @@ if __name__ == '__main__':
 
     # Print top 10 similar articles
     article_similarity = X_encoded.dot(X_encoded.transpose())
+    np.fill_diagonal(article_similarity, 0)
     for i,v in enumerate(article_similarity.argmax(1)[0:10]):
         print(article_contents[article_contents.valid_triplet_data == 1][['category_publish_name','title']].iloc[i])
         print(article_contents[article_contents.valid_triplet_data == 1][['category_publish_name','title']].iloc[v])
+        print('score: {}'.format(article_similarity[i,v]))
         print()
 
 

@@ -14,7 +14,11 @@ Quick start
 Python version = 3.6.7
 
 ```shell
-python main.py --model_name dae_triplet 
+# to train a new model
+python main.py --model_name dae_triplet --verbose --encode_full
+
+# to reuse previous model and previous training data and continue training
+python main.py --model_name dae_triplet --verbose --encode_full --restore_previous_model --restore_previous_data
 ```
 
 ---

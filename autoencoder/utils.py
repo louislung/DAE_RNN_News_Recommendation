@@ -72,7 +72,8 @@ def masking_noise(X, v):
 
     :return: transformed data
     """
-    X_noise = X.copy()
+
+    X_noise = X.tolil(True) if not isinstance(X, np.ndarray) else X.copy()
 
     n_samples = X.shape[0]
     n_features = X.shape[1]
@@ -81,9 +82,9 @@ def masking_noise(X, v):
         mask = np.random.randint(0, n_features, v)
 
         for m in mask:
-            X_noise[i][m] = 0.
+            X_noise[i,m] = 0.
 
-    return X_noise
+    return X_noise.tocsr() if not isinstance(X, np.ndarray) else X_noise
 
 
 def salt_and_pepper_noise(X, v):
@@ -96,7 +97,7 @@ def salt_and_pepper_noise(X, v):
 
     :return: transformed data
     """
-    X_noise = X.copy()
+    X_noise = X.tolil(True) if not isinstance(X, np.ndarray) else X.copy()
     n_features = X.shape[1]
 
     mn = X.min()
@@ -108,11 +109,11 @@ def salt_and_pepper_noise(X, v):
         for m in mask:
 
             if np.random.random() < 0.5:
-                X_noise[i][m] = mn
+                X_noise[i,m] = mn
             else:
-                X_noise[i][m] = mx
+                X_noise[i,m] = mx
 
-    return X_noise
+    return X_noise.tocsr() if not isinstance(X, np.ndarray) else X_noise
 
 
 def decay_noise(X, v):
