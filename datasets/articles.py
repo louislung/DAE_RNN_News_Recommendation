@@ -39,7 +39,9 @@ def tokenizer_chinese(text):
     :return: tokenized word
     :rtype: list of str
     """
-    return [word for word in jieba.cut(text) if len(word)>1 and not word.isdigit()] #todo: need to take care 5%, 5.5, etc
+    # todo: need to take care 5%, 5.5, etc
+    # todo: word in bracket should consider as one word? e.g.「磁力王」,（Michael Fassbender）, 《蝙蝠俠對超人：正義曙光》,（男星Ed Skrein飾演）
+    return [word for word in jieba.cut(text) if len(word)>1 and not word.isdigit()]
 
 
 def read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/latest.snappy.parquet',
