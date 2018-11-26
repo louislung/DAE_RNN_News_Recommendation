@@ -78,7 +78,7 @@ if __name__ == '__main__':
         X_pos = sparse.load_npz(model.data_dir + 'article_contents_vectorized_pos.npz')
         X_neg = sparse.load_npz(model.data_dir + 'article_contents_vectorized_neg.npz')
     else:
-        article_contents = articles.read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/latest.snappy.parquet',save_path=None,id_colname='article_id',cate_colname='main_category_id')
+        article_contents = articles.read_articles(path='/Users/kitlunglaw/Documents/HK01/cache/s3/article_contents/latest.snappy.parquet',save_path=None,id_colname='article_id',cate_colname='main_category_id')
         row = 1000
         count_vectorizer, X, X_pos, X_neg = articles.count_vectorize(
             article_contents[article_contents.valid_triplet_data == 1].main_content[0:row],
@@ -116,7 +116,7 @@ if __name__ == '__main__':
     for i,v in enumerate(np.nanargmax(article_embedding_cosine_sim,1)[0:10]):
         print(article_contents[article_contents.valid_triplet_data == 1][['category_publish_name','title']].iloc[i])
         print('most similar article using count vectorizer')
-        print(article_contents[article_contents.valid_triplet_data == 1][['category_publish_name', 'title']].iloc[np.nanargmax(article_cosine_sim,1)])
+        print(article_contents[article_contents.valid_triplet_data == 1][['category_publish_name', 'title']].iloc[np.nanargmax(article_cosine_sim,1)[i]])
         print('most similar article using DAE')
         print(article_contents[article_contents.valid_triplet_data == 1][['category_publish_name','title']].iloc[v])
         print('score: {}'.format(article_embedding_cosine_sim[i,v]))

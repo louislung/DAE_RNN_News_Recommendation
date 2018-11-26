@@ -148,7 +148,9 @@ def get_sparse_ind_val_shape(sparse_m):
     :return: tuple of indices, values, shape
     """
 
-    indices = tuple(np.array(_) for _ in zip(*sorted(zip(*sparse_m.nonzero()))))
+    # indices = tuple(np.array(_) for _ in zip(*sorted(zip(*.nonzero()))))
+    sparse_m.sort_indices()
+    indices = sparse_m.nonzero()
     values = np.array(sparse_m[indices]).reshape(-1)
     indices = np.matrix(indices).transpose()
     shape = sparse_m.shape

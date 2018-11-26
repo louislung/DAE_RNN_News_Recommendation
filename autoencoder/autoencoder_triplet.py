@@ -277,10 +277,10 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
                 self.cost = - _reduce_sum(self.input_data.__mul__(tf.log(self.decode)))
                 self.cost += - _reduce_sum(self.input_data_pos.__mul__(tf.log(self.decode_pos)))
                 self.cost += - _reduce_sum(self.input_data_neg.__mul__(tf.log(self.decode_neg)))
-                self.cost += self.alpha * tf.reduce_sum(tf.log(tf.add(tf.exp(
+                self.cost += self.alpha * tf.reduce_sum(tf.log1p(tf.exp(
                     tf.matmul(self.encode, tf.transpose(self.encode_neg)) -
                     tf.matmul(self.encode, tf.transpose(self.encode_pos))
-                ),1)))
+                )))
                 _ = tf.summary.scalar("cross_entropy", self.cost)
 
             elif self.loss_func == 'mean_squared':
