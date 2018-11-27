@@ -1,6 +1,6 @@
 import os, pandas as pd, jieba
 from pathlib import Path
-from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
 
 
 # Define path
@@ -103,10 +103,9 @@ def count_vectorize(in_series, in_pos_series=None, in_neg_series=None, tokenizer
     :param tokenizer: tokenizer to be used in CountVectorizer
     :param **param_count_vectorizer: extra parameter for CountVectorizer, e.g. min_df, max_df, max_features
 
-    :type path: str or pathlib.PosixPath
-    :type save_path: str or pathlib.PosixPath
-    :type id_colname: str
-    :type cate_colname: str
+    :type in_series: pandas.Series
+    :type in_pos_series: pandas.Series
+    :type in_neg_series: pandas.Series
 
     :return: CountVectorizer and output from CountVectorizer
     :rtype: csr_matrix
@@ -124,6 +123,23 @@ def count_vectorize(in_series, in_pos_series=None, in_neg_series=None, tokenizer
     return count_vectorizer, X, X_pos, X_neg
 
 
+def tfidf_transform(in_df, **param_tfidf_transformer):
+    """ Use sklearn's CountVectorizer to fit transform input data
+
+    :param in_df: matrix of word count to be fit and transformed
+    :param **param_tfidf_transformer: extra parameter for TfidfTransformer, e.g. norm, use_idf, smooth_idf, sublinear_tf
+
+    :type in_df: scipy sparse matrix
+
+    :return: TfidfTransformer and output from TfidfTransformer
+    :rtype: csr_matrix
+    """
+    tfidf_transformer = TfidfTransformer(**param_tfidf_transformer)
+    X = tfidf_transformer.fit_transform(in_df)
+
+    return tfidf_transformer, X
+
+
 if __name__ == '__main__':
     article_contents = read_articles(save_path=None)
     row = 1000
@@ -134,3 +150,4 @@ if __name__ == '__main__':
                                                         max_df=0.99,
                                                         max_features=1000
                                                         )
+    tfidf_transformer, X_tfidf = tfidf_transform(X)

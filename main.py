@@ -74,11 +74,12 @@ if __name__ == '__main__':
     # Prepare data
     if FLAGS.restore_previous_data:
         article_contents = pd.read_parquet(model.data_dir + 'article_contents.snappy.parquet')
-        X = sparse.load_npz(model.data_dir + 'article_contents_vectorized.npz')
-        X_pos = sparse.load_npz(model.data_dir + 'article_contents_vectorized_pos.npz')
-        X_neg = sparse.load_npz(model.data_dir + 'article_contents_vectorized_neg.npz')
+        X = sparse.load_npz(model.data_dir + 'article_contents_binary_count_vectorized.npz')
+        X_pos = sparse.load_npz(model.data_dir + 'article_contents_binary_count_vectorized_pos.npz')
+        X_neg = sparse.load_npz(model.data_dir + 'article_contents_binary_count_vectorized_neg.npz')
+        X_tfidf = sparse.load_npz(model.data_dir + 'article_contents_tfidf_vectorized.npz')
     else:
-        article_contents = articles.read_articles(path='/Users/kitlunglaw/Documents/HK01/cache/s3/article_contents/latest.snappy.parquet',save_path=None,id_colname='article_id',cate_colname='main_category_id')
+        article_contents = articles.read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/latest.snappy.parquet',save_path=None,id_colname='article_id',cate_colname='main_category_id')
         row = 1000
         count_vectorizer, X, X_pos, X_neg = articles.count_vectorize(
             article_contents[article_contents.valid_triplet_data == 1].main_content[0:row],
@@ -87,8 +88,20 @@ if __name__ == '__main__':
             min_df=FLAGS.min_df,
             max_df=FLAGS.max_df,
             max_features=FLAGS.max_features,
-            binary=True
+            binary=False
         )
+        tfidf_vectorizer, X_tfidf = articles.tfidf_transform(X)
+
+        # Save training data
+        article_contents.to_parquet(model.data_dir + 'article_contents.snappy.parquet')
+        sparse.save_npz(model.data_dir + 'article_contents_count_vectorized.npz', X)
+
+        X.data = np.array([1] * len(X.data))
+
+        sparse.save_npz(model.data_dir + 'article_contents_binary_count_vectorized.npz', X)
+        sparse.save_npz(model.data_dir + 'article_contents_binary_count_vectorized_pos.npz', X_pos)
+        sparse.save_npz(model.data_dir + 'article_contents_binary_count_vectorized_neg.npz', X_neg)
+        sparse.save_npz(model.data_dir + 'article_contents_tfidf_vectorized.npz', X_tfidf)
 
     trX = {'org': X[:-100],
            'pos': X_pos[:-100],
@@ -101,27 +114,21 @@ if __name__ == '__main__':
     # Fit the model
     model.fit(trX, vlX, restore_previous_model=FLAGS.restore_previous_model)
 
-    # Save training data
-    article_contents.to_parquet(model.data_dir + 'article_contents.snappy.parquet')
-    sparse.save_npz(model.data_dir + 'article_contents_vectorized.npz', X)
-    sparse.save_npz(model.data_dir + 'article_contents_vectorized_pos.npz', X_pos)
-    sparse.save_npz(model.data_dir + 'article_contents_vectorized_neg.npz', X_neg)
-
     # Encode the data and store it
     X_encoded = model.transform(X, name='full', save=FLAGS.encode_full)
 
     # Print top 10 similar articles
-    article_cosine_sim = helpers.pairwise_similarity(X, 'cosine')
-    article_embedding_cosine_sim = helpers.pairwise_similarity(X_encoded, 'cosine')
+    article_binary_count_cosine_sim = helpers.pairwise_similarity(X, metric='cosine')
+    article_tfidf_cosine_sim = helpers.pairwise_similarity(X_tfidf, metric='linear kernel') #This is same as cosine similarity as X_tfidf is l2 normalized (refer to sklearn's TFIDFTransformer for this)
+    article_embedding_cosine_sim = helpers.pairwise_similarity(X_encoded, metric='cosine')
     for i,v in enumerate(np.nanargmax(article_embedding_cosine_sim,1)[0:10]):
         print(article_contents[article_contents.valid_triplet_data == 1][['category_publish_name','title']].iloc[i])
         print('most similar article using count vectorizer')
-        print(article_contents[article_contents.valid_triplet_data == 1][['category_publish_name', 'title']].iloc[np.nanargmax(article_cosine_sim,1)[i]])
+        print(article_contents[article_contents.valid_triplet_data == 1][['category_publish_name', 'title']].iloc[np.nanargmax(article_binary_count_cosine_sim,1)[i]])
         print('most similar article using DAE')
         print(article_contents[article_contents.valid_triplet_data == 1][['category_publish_name','title']].iloc[v])
         print('score: {}'.format(article_embedding_cosine_sim[i,v]))
         print()
-
 
     print(__file__ + ': End')
 

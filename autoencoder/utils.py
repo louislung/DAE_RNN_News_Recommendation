@@ -1,4 +1,4 @@
-from scipy import misc
+from scipy import misc, sparse
 import tensorflow as tf
 import numpy as np, os
 from pathlib import Path
@@ -145,15 +145,22 @@ def get_sparse_ind_val_shape(sparse_m):
 
     :param sparse_m: input sparse matrix
 
+    :type any scipy sparse matrix, csr/csc/coo/lil
+
     :return: tuple of indices, values, shape
     """
-
-    # indices = tuple(np.array(_) for _ in zip(*sorted(zip(*.nonzero()))))
+    if not isinstance(sparse_m, sparse.csr_matrix):
+        sparse_m = sparse.csr_matrix(sparse_m)
     sparse_m.sort_indices()
-    indices = sparse_m.nonzero()
-    values = np.array(sparse_m[indices]).reshape(-1)
-    indices = np.matrix(indices).transpose()
+
+    sparse_m = sparse.coo_matrix(sparse_m)
+    indices = np.column_stack((sparse_m.row, sparse_m.col))
+    values = sparse_m.data
     shape = sparse_m.shape
+
+    #indices = sparse_m.nonzero()
+    #values = np.array(sparse_m[indices]).reshape(-1)
+    #indices = np.matrix(indices).transpose()
 
     return (indices, values, shape)
 
