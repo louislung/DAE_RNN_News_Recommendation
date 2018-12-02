@@ -138,9 +138,11 @@ class DenoisingAutoencoder(object):
         for i in range(self.num_epochs):
             self._run_train_step(train_set, corruption_ratio)
 
-            if i % 5 == 0:
-                if validation_set is not None:
-                    self._run_validation_error_and_summaries(i, validation_set)
+            if (i+1) % 5 == 0:
+                self._run_validation_error_and_summaries(i+1, validation_set)
+        else:
+            if (i+1) % 5 != 0:
+                self._run_validation_error_and_summaries(i+1, validation_set)
 
     def _run_train_step(self, train_set, corruption_ratio):
 
@@ -173,7 +175,7 @@ class DenoisingAutoencoder(object):
         """
 
         if self.corr_type == 'masking':
-            x_corrupted = utils.masking_noise(data, v)
+            x_corrupted = utils.masking_noise(data, self.corr_frac)
 
         elif self.corr_type == 'salt_and_pepper':
             x_corrupted = utils.salt_and_pepper_noise(data, v)
@@ -198,6 +200,8 @@ class DenoisingAutoencoder(object):
 
         :return: self
         """
+
+        if validation_set is None: return
 
         if self.sparse_input:
             _temp = utils.get_sparse_ind_val_shape(validation_set)

@@ -1,6 +1,7 @@
-import tensorflow as tf, os, scipy.sparse as sparse, pandas as pd
+import tensorflow as tf, os, scipy.sparse as sparse, pandas as pd, numpy as np
 import autoencoder.autoencoder_triplet as autoencoder_triplet
 import datasets.articles as articles
+import helpers
 from pathlib import Path
 
 
@@ -20,7 +21,7 @@ flags.DEFINE_boolean('encode_full', False, 'Whether to encode and store the full
 
 # Count Vectorizer parameters
 flags.DEFINE_boolean('restore_previous_data', False, 'If true, restore previous data corresponding to model name')
-flags.DEFINE_float('min_df', 0.01, 'min_df for sklearn CountVectorizer')
+flags.DEFINE_float('min_df', 0, 'min_df for sklearn CountVectorizer')
 flags.DEFINE_float('max_df', 0.99, 'max_df for sklearn CountVectorizer')
 flags.DEFINE_integer('max_features', 10000, 'max_features for sklearn CountVectorizer')
 
@@ -28,9 +29,9 @@ flags.DEFINE_integer('max_features', 10000, 'max_features for sklearn CountVecto
 flags.DEFINE_string('model_name', '', 'Model name.')
 flags.DEFINE_boolean('restore_previous_model', False, 'If true, restore previous model corresponding to model name')
 flags.DEFINE_integer('seed', -1, 'Seed for the random generators (>= 0). Useful for testing hyperparameters')
-flags.DEFINE_integer('compress_factor', 10, 'Compression factor to determine num. of hidder nodes')
-flags.DEFINE_string('corr_type', 'none', 'Type of input corruption. ["none", "masking", "salt_and_pepper", "decay]')
-flags.DEFINE_float('corr_frac', 0., 'Fraction of the input to corrupt.')
+flags.DEFINE_integer('compress_factor', 20, 'Compression factor to determine num. of hidder nodes')
+flags.DEFINE_string('corr_type', 'masking', 'Type of input corruption. ["none", "masking", "salt_and_pepper", "decay]')
+flags.DEFINE_float('corr_frac', 0.3, 'Fraction of the input to corrupt.')
 flags.DEFINE_integer('xavier_init', 1, 'Value for the constant in xavier weights initialization.')
 flags.DEFINE_string('enc_act_func', 'sigmoid', 'Activation function for the encoder. ["sigmoid", "tanh"]')
 flags.DEFINE_string('dec_act_func', 'sigmoid', 'Activation function for the decoder. ["sigmoid", "tanh", "none"]')
@@ -39,7 +40,7 @@ flags.DEFINE_string('loss_func', 'cross_entropy', 'Loss function. ["mean_squared
 flags.DEFINE_string('opt', 'gradient_descent', '["gradient_descent", "ada_grad", "momentum"]')
 flags.DEFINE_float('learning_rate', 0.01, 'Initial learning rate.')
 flags.DEFINE_float('momentum', 0.5, 'Momentum parameter')
-flags.DEFINE_integer('num_epochs', 500, 'Number of epochs, set to 0 will not train the model')
+flags.DEFINE_integer('num_epochs', 50, 'Number of epochs, set to 0 will not train the model')
 flags.DEFINE_integer('batch_size', 100, 'Size of each mini-batch.') #todo: allows batch_size to be set 0-1
 flags.DEFINE_float('alpha', 0.01, 'hyper parameter for balancing similarity in loss function')
 
@@ -72,20 +73,35 @@ if __name__ == '__main__':
     # Prepare data
     if FLAGS.restore_previous_data:
         article_contents = pd.read_parquet(model.data_dir + 'article_contents.snappy.parquet')
-        X = sparse.load_npz(model.data_dir + 'article_contents_vectorized.npz')
-        X_pos = sparse.load_npz(model.data_dir + 'article_contents_vectorized_pos.npz')
-        X_neg = sparse.load_npz(model.data_dir + 'article_contents_vectorized_neg.npz')
+        X = sparse.load_npz(model.data_dir + 'article_contents_binary_count_vectorized.npz')
+        X_pos = sparse.load_npz(model.data_dir + 'article_contents_binary_count_vectorized_pos.npz')
+        X_neg = sparse.load_npz(model.data_dir + 'article_contents_binary_count_vectorized_neg.npz')
+        X_tfidf = sparse.load_npz(model.data_dir + 'article_contents_tfidf_vectorized.npz')
     else:
-        article_contents = articles.read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/latest.snappy.parquet',save_path=None,id_colname='article_id',cate_colname='main_category_id')
+        article_contents = articles.read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/latest.snappy.parquet')
+        article_contents = articles.similar_articles(article_contents, id_colname='article_id', cate_colname='main_category_id', min_cate=2)
         row = 1000
         count_vectorizer, X, X_pos, X_neg = articles.count_vectorize(
             article_contents[article_contents.valid_triplet_data == 1].main_content[0:row],
             article_contents.main_content.loc[article_contents[article_contents.valid_triplet_data == 1].article_id_pos[0:row]],
-            article_contents.main_content.loc[article_contents[article_contents.valid_triplet_data == 1].article_id_pos[0:row]],
+            article_contents.main_content.loc[article_contents[article_contents.valid_triplet_data == 1].article_id_neg[0:row]],
             min_df=FLAGS.min_df,
             max_df=FLAGS.max_df,
             max_features=FLAGS.max_features,
+            binary=False
         )
+        tfidf_vectorizer, X_tfidf = articles.tfidf_transform(X)
+
+        # Save training data
+        article_contents.to_parquet(model.data_dir + 'article_contents.snappy.parquet')
+        sparse.save_npz(model.data_dir + 'article_contents_count_vectorized.npz', X)
+
+        X.data = np.array([1] * len(X.data))
+
+        sparse.save_npz(model.data_dir + 'article_contents_binary_count_vectorized.npz', X)
+        sparse.save_npz(model.data_dir + 'article_contents_binary_count_vectorized_pos.npz', X_pos)
+        sparse.save_npz(model.data_dir + 'article_contents_binary_count_vectorized_neg.npz', X_neg)
+        sparse.save_npz(model.data_dir + 'article_contents_tfidf_vectorized.npz', X_tfidf)
 
     trX = {'org': X[:-100],
            'pos': X_pos[:-100],
@@ -98,23 +114,21 @@ if __name__ == '__main__':
     # Fit the model
     model.fit(trX, vlX, restore_previous_model=FLAGS.restore_previous_model)
 
-    # Save training data
-    article_contents.to_parquet(model.data_dir + 'article_contents.snappy.parquet')
-    sparse.save_npz(model.data_dir + 'article_contents_vectorized.npz', X)
-    sparse.save_npz(model.data_dir + 'article_contents_vectorized_pos.npz', X_pos)
-    sparse.save_npz(model.data_dir + 'article_contents_vectorized_neg.npz', X_neg)
-
     # Encode the data and store it
     X_encoded = model.transform(X, name='full', save=FLAGS.encode_full)
 
     # Print top 10 similar articles
-    article_similarity = X_encoded.dot(X_encoded.transpose())
-    for i,v in enumerate(article_similarity.argmax(1)[0:10]):
+    article_binary_count_cosine_sim = helpers.pairwise_similarity(X, metric='cosine')
+    article_tfidf_cosine_sim = helpers.pairwise_similarity(X_tfidf, metric='linear kernel') #This is same as cosine similarity as X_tfidf is l2 normalized (refer to sklearn's TFIDFTransformer for this)
+    article_embedding_cosine_sim = helpers.pairwise_similarity(X_encoded, metric='cosine')
+    for i,v in enumerate(np.nanargmax(article_embedding_cosine_sim,1)[0:10]):
         print(article_contents[article_contents.valid_triplet_data == 1][['category_publish_name','title']].iloc[i])
+        print('most similar article using count vectorizer')
+        print(article_contents[article_contents.valid_triplet_data == 1][['category_publish_name', 'title']].iloc[np.nanargmax(article_binary_count_cosine_sim,1)[i]])
+        print('most similar article using DAE')
         print(article_contents[article_contents.valid_triplet_data == 1][['category_publish_name','title']].iloc[v])
+        print('score: {}'.format(article_embedding_cosine_sim[i,v]))
         print()
 
-
     print(__file__ + ': End')
-
 
