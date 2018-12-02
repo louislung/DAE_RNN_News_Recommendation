@@ -33,6 +33,8 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
         self.input_data_neg = None
         self.input_data_corr_neg = None
 
+        self.train_cost = ([], [], [])
+
         super().__init__(model_name, compress_factor, main_dir, enc_act_func,
                          dec_act_func, loss_func, num_epochs, batch_size,
                          xavier_init, opt, learning_rate, momentum, corr_type,
@@ -54,12 +56,14 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
         assert type(train_set['org']) == type(train_set['neg'])
         assert train_set['org'].shape == train_set['pos'].shape
         assert train_set['org'].shape == train_set['neg'].shape
+        assert (train_set['pos'] != train_set['neg']).sum()
 
         if validation_set != None:
             assert type(validation_set['org']) == type(validation_set['pos'])
             assert type(validation_set['org']) == type(validation_set['neg'])
             assert validation_set['org'].shape == validation_set['pos'].shape
             assert validation_set['org'].shape == validation_set['neg'].shape
+            assert (validation_set['pos'] != validation_set['neg']).sum()
 
         n_features = train_set['org'].shape[1]
         self.sparse_input = False if isinstance(train_set['org'],np.ndarray) else True
@@ -103,11 +107,14 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
         corruption_ratio = np.round(self.corr_frac * train_set['org'].shape[1]).astype(np.int)
 
         for i in range(self.num_epochs):
+            self.train_cost = ([],[],[])
             self._run_train_step(train_set, corruption_ratio)
 
-            if i % 5 == 0:
-                if validation_set is not None:
-                    self._run_validation_error_and_summaries(i, validation_set)
+            if (i+1) % 5 == 0:
+                self._run_validation_error_and_summaries(i+1, validation_set)
+        else:
+            if (i+1) % 5 != 0:
+                self._run_validation_error_and_summaries(i+1, validation_set)
 
     def _run_train_step(self, train_set, corruption_ratio):
 
@@ -142,7 +149,11 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
                            self.input_data_corr: x_corr_batch[0],
                            self.input_data_corr_pos: x_corr_batch[1],
                            self.input_data_corr_neg: x_corr_batch[2]}
-            self.tf_session.run(self.train_step, feed_dict=tr_feed)
+            step, train_autoencoder_loss, train_triplet_loss, train_cost = self.tf_session.run([self.train_step,self.autoencoder_loss,self.triplet_loss,self.cost], feed_dict=tr_feed)
+
+            self.train_cost[0].append(train_autoencoder_loss)
+            self.train_cost[1].append(train_triplet_loss)
+            self.train_cost[2].append(train_cost)
 
     def _run_validation_error_and_summaries(self, epoch, validation_set):
 
@@ -153,6 +164,13 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
 
         :return: self
         """
+
+        if self.verbose == 1:
+            print('At step %s: Training cost: Autoencoder=%s\tTriplet=%s\tOverall=%s' % (epoch, np.mean(self.train_cost[0]), np.mean(self.train_cost[1]),np.mean(self.train_cost[2])), end='')
+
+        if validation_set is None:
+            print()
+            return
 
         if self.sparse_input:
             _temp = utils.get_sparse_ind_val_shape(validation_set['org'])
@@ -172,14 +190,14 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
                        self.input_data_corr_pos: validation_set['pos'],
                        self.input_data_corr_neg: validation_set['neg']}
 
-        result = self.tf_session.run([self.tf_merged_summaries, self.cost], feed_dict=vl_feed)
+        result = self.tf_session.run([self.tf_merged_summaries, self.autoencoder_loss, self.triplet_loss, self.cost], feed_dict=vl_feed)
         summary_str = result[0]
-        err = result[1]
 
         self.tf_summary_writer.add_summary(summary_str, epoch)
 
         if self.verbose == 1:
-            print("Validation cost at step %s: %s" % (epoch, err))
+            print("\tValidation cost: Autoencoder=%s\tTriplet=%s\tOverall=%s" % (result[1], result[2], result[3]), end='')
+            print()
 
     def _build_model(self, n_features):
 
@@ -274,13 +292,14 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
 
         with tf.name_scope("cost"):
             if self.loss_func == 'cross_entropy':
-                self.cost = - _reduce_sum(self.input_data.__mul__(tf.log(self.decode)))
-                self.cost += - _reduce_sum(self.input_data_pos.__mul__(tf.log(self.decode_pos)))
-                self.cost += - _reduce_sum(self.input_data_neg.__mul__(tf.log(self.decode_neg)))
-                self.cost += self.alpha * tf.reduce_sum(tf.log1p(tf.exp(
-                    tf.matmul(self.encode, tf.transpose(self.encode_neg)) -
-                    tf.matmul(self.encode, tf.transpose(self.encode_pos))
-                )))
+                self.autoencoder_loss = - tf.reduce_mean(_reduce_sum(self.input_data.__mul__(tf.log(tf.clip_by_value(self.decode,1e-16,1.)))))
+                self.autoencoder_loss += - tf.reduce_mean(_reduce_sum(self.input_data_pos.__mul__(tf.log(tf.clip_by_value(self.decode_pos,1e-16,1.)))))
+                self.autoencoder_loss += - tf.reduce_mean(_reduce_sum(self.input_data_neg.__mul__(tf.log(tf.clip_by_value(self.decode_neg,1e-16,1.)))))
+                self.triplet_loss = tf.reduce_mean(-tf.log_sigmoid(tf.reduce_sum(
+                    (self.encode * self.encode_pos) -
+                    (self.encode * self.encode_neg)
+                ,1)))
+                self.cost = self.autoencoder_loss + self.alpha * self.triplet_loss
                 _ = tf.summary.scalar("cross_entropy", self.cost)
 
             elif self.loss_func == 'mean_squared':
@@ -299,6 +318,17 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
         with tf.name_scope("train"):
             if self.opt == 'gradient_descent':
                 self.train_step = tf.train.GradientDescentOptimizer(self.learning_rate).minimize(self.cost)
+
+                # Below are used for debug purpose only
+                # [self.grad_W, self.grad_bh] = tf.gradients(self.cost, [self.W_, self.bh_])
+                # self.new_W = self.W_.assign(self.W_ - self.learning_rate * self.grad_W)
+                # self.new_bv = self.bv_.assign(self.bv_ - self.learning_rate * self.grad_bv)
+                # self.new_bh = self.bh_.assign(self.bh_ - self.learning_rate * self.grad_bh)
+                # self.train_step = [self.new_W, self.new_bh]
+
+                # self.optimizer = tf.train.GradientDescentOptimizer(self.learning_rate)
+                # self.grads_and_vars = self.optimizer.compute_gradients(self.cost, [self.W_, self.bv_, self.bh_])
+                # self.train_step = self.optimizer.apply_gradients(self.grads_and_vars)
 
             elif self.opt == 'ada_grad':
                 self.train_step = tf.train.AdagradOptimizer(self.learning_rate).minimize(self.cost)

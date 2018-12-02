@@ -1,4 +1,4 @@
-import os, pandas as pd, jieba
+import os, pandas as pd, jieba, numpy as np
 from pathlib import Path
 from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
 
@@ -44,52 +44,85 @@ def tokenizer_chinese(text):
     return [word for word in jieba.cut(text) if len(word)>1 and not word.isdigit()]
 
 
-def read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/latest.snappy.parquet',
-                  save_path = 'data/article_contents_processed.snappy.parquet',
-                  id_colname='article_id', cate_colname='main_category_id'):
+def read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/latest.snappy.parquet'):
     """ Read articles data and map a positive and a negative article for every article
 
     :param path: path of parquet to be read
-    :param save_path: path to save the output parquet
-    :param id_colname: column name of the id column
-    :param cate_colname: column name of the category column
 
     :type path: str or pathlib.PosixPath
-    :type save_path: str or pathlib.PosixPath
+
+    :return: processed data with extra columns: title_group
+    :rtype: pandas.core.frame.DataFrame
+
+    .. note:: the id of input data should be in numeric format
+    """
+    out_df = pd.read_parquet(path)
+    out_df.index = out_df.article_id
+    out_df = out_df[out_df.main_content.str.strip() != '']
+    out_df = out_df[out_df.main_content.notna()]
+
+    # Add column based on title, e.g. extract 食物設計 from 【食物設計（下）】
+    out_df['title_group'] = out_df.title.str.extract('【(.*?)[（|】]')
+
+    return out_df
+
+
+def save_articles(in_df, save_path = 'data/article_contents_processed.snappy.parquet'):
+    """ Read articles data and map a positive and a negative article for every article
+
+    :param in_df: data to be saved
+
+    :type in_df: pandas.core.frame.DataFrame
+    """
+
+    in_df.to_parquet(save_path)
+    print('Data saved to {}'.format(save_path))
+
+
+def similar_articles(out_df, id_colname='article_id', cate_colname='main_category_id', min_cate=2, max_cate=None):
+    """ Read articles data and map a positive and a negative article for every article
+
+    :param out_df: data
+    :param id_colname: column name of the id column
+    :param cate_colname: column name of the category column
+    :param min_cate: only value in cate_colname which contains >= min_cate articles will be considered
+    :param max_cate: only value in cate_colname which contains <= max_cate articles will be considered
+
+    :type path: pandas.core.frame.DataFrame
     :type id_colname: str
     :type cate_colname: str
+    :type min_cate: int
+    :type max_cate: int or None
 
     :return: processed data with extra columns: xxx_pos, xxx_neg, valid_triplet_data
     :rtype: pandas.core.frame.DataFrame
 
     .. note:: the id of input data should be in numeric format
     """
+
     id_pos_colname = id_colname + '_pos'
     id_neg_colname = id_colname + '_neg'
-
-    out_df = pd.read_parquet(path)
-    out_df.index = out_df.article_id
-    out_df = out_df[out_df.main_content.str.strip() != '']
-    out_df = out_df[out_df.main_content.notna()]
+    cate_value_counts = out_df[cate_colname].value_counts()
+    cate_value_counts = cate_value_counts[(cate_value_counts <= (np.inf if max_cate is None else max_cate)) & (cate_value_counts >= min_cate)]
 
     # For each record, find another record under same category as positive item
     out_df[id_pos_colname] = 0
-    for cate_id in out_df[cate_colname].unique():
+    out_df[id_neg_colname] = 0
+    for cate_id in cate_value_counts.index:
         out_df = pd.merge(out_df,
                           out_df[out_df[cate_colname] == cate_id][[id_colname]].shift(-1).add_suffix('2'),
                           how='left',left_index=True, right_index=True)
-        out_df.loc[out_df[id_colname + '2'].notnull(),id_pos_colname] = out_df[id_colname + '2'][out_df[id_colname + '2'].notnull()].astype(int)
+        indices = out_df[id_colname + '2'].notnull()
+        out_df.loc[indices, id_pos_colname] = out_df[id_colname + '2'][indices].astype(int).tolist()
+        out_df.loc[indices, id_neg_colname] = out_df[out_df[cate_colname] != cate_id][id_colname].sample(np.count_nonzero(indices)).tolist()
         out_df.drop(columns=[id_colname + '2'], inplace=True)
 
     # For each record, find a random id as negative item
-    out_df[id_neg_colname] = 0
-    out_df[id_neg_colname] = list(out_df[id_colname].sample(frac=1))
+    # out_df[id_neg_colname] = list(out_df[id_colname].sample(frac=1))
 
     # valid_triplet_data = 1 only if the record has both pos and neg item
     out_df['valid_triplet_data'] = 0
-    out_df.loc[(out_df[id_colname + '_pos'] != 0) & (out_df.article_id_neg != 0),'valid_triplet_data'] = 1
-
-    if save_path: out_df.to_parquet(save_path)
+    out_df.loc[(out_df[id_pos_colname] != 0) & (out_df[id_pos_colname].notnull()) & (out_df[id_neg_colname] != 0) & (out_df[id_neg_colname].notnull()) ,'valid_triplet_data'] = 1
 
     return out_df
 
@@ -117,8 +150,8 @@ def count_vectorize(in_series, in_pos_series=None, in_neg_series=None, tokenizer
     X_pos = None if in_pos_series is None else count_vectorizer.transform(in_pos_series)
     X_neg = None if in_neg_series is None else count_vectorizer.transform(in_neg_series)
 
-    assert X.shape[1] == X_pos.shape[1]
-    assert X.shape[1] == X_neg.shape[1]
+    if in_pos_series is not None: assert X.shape[1] == X_pos.shape[1]
+    if in_neg_series is not None: assert X.shape[1] == X_neg.shape[1]
 
     return count_vectorizer, X, X_pos, X_neg
 

@@ -3,7 +3,6 @@ import autoencoder.autoencoder_triplet as autoencoder_triplet
 import datasets.articles as articles
 import helpers
 from pathlib import Path
-from scipy.spatial.distance import pdist, squareform
 
 
 # Define path
@@ -79,12 +78,13 @@ if __name__ == '__main__':
         X_neg = sparse.load_npz(model.data_dir + 'article_contents_binary_count_vectorized_neg.npz')
         X_tfidf = sparse.load_npz(model.data_dir + 'article_contents_tfidf_vectorized.npz')
     else:
-        article_contents = articles.read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/latest.snappy.parquet',save_path=None,id_colname='article_id',cate_colname='main_category_id')
+        article_contents = articles.read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/latest.snappy.parquet')
+        article_contents = articles.similar_articles(article_contents, id_colname='article_id', cate_colname='main_category_id', min_cate=2)
         row = 1000
         count_vectorizer, X, X_pos, X_neg = articles.count_vectorize(
             article_contents[article_contents.valid_triplet_data == 1].main_content[0:row],
             article_contents.main_content.loc[article_contents[article_contents.valid_triplet_data == 1].article_id_pos[0:row]],
-            article_contents.main_content.loc[article_contents[article_contents.valid_triplet_data == 1].article_id_pos[0:row]],
+            article_contents.main_content.loc[article_contents[article_contents.valid_triplet_data == 1].article_id_neg[0:row]],
             min_df=FLAGS.min_df,
             max_df=FLAGS.max_df,
             max_features=FLAGS.max_features,
@@ -131,5 +131,4 @@ if __name__ == '__main__':
         print()
 
     print(__file__ + ': End')
-
 
