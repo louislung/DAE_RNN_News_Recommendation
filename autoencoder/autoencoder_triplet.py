@@ -34,6 +34,7 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
         self.input_data_corr_neg = None
 
         self.train_cost = ([], [], [])
+        self.train_time = None
 
         super().__init__(model_name, compress_factor, main_dir, enc_act_func,
                          dec_act_func, loss_func, num_epochs, batch_size,

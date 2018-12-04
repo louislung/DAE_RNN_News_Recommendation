@@ -71,14 +71,14 @@ def masking_noise(X, v):
     (chosen at random) is forced to zero.
 
     :param X: array_like, Input data
-    :param v: int, fraction of elements to distort
+    :param v: float, corruption rate
 
     :return: transformed data
     """
     X_noise = X.tocoo(True) if not isinstance(X, np.ndarray) else X.copy()
 
     if isinstance(X, np.ndarray):
-        mask = np.random.choice(a=[False, True], size=X_noise.shape, p=[v, 1 - v])
+        mask = np.random.choice(a=[0, 1], size=X_noise.shape, p=[v, 1 - v])
         X_noise = mask * X_noise
     else:
         mask = np.random.rand(X_noise.nnz) >= v
@@ -121,13 +121,13 @@ def decay_noise(X, v):
     """ Apply decaying noise to data in X, in other words all elements of X is decayed by a fraction v
 
     :param X: array_like, Input data
-    :param v: int, fraction of elements to distort
+    :param v: float, corruption rate
 
     :return: transformed data
     """
     X_noise = X.copy()
 
-    X_noise = X_noise * v
+    X_noise = X_noise * (1. - v)
 
     return X_noise
 

@@ -1,5 +1,5 @@
 import tensorflow as tf
-import numpy as np, os
+import numpy as np, os, time
 from pathlib import Path
 
 from . import utils
@@ -28,6 +28,8 @@ class DenoisingAutoencoderTripletOnline(DenoisingAutoencoder):
         self.alpha = alpha
 
         self.train_cost = ([], [], [])
+        self.fraction = []
+        self.num = []
 
         self.triplet_strategy = triplet_strategy
 
@@ -80,7 +82,11 @@ class DenoisingAutoencoderTripletOnline(DenoisingAutoencoder):
 
         for i in range(self.num_epochs):
             self.train_cost = ([], [], [])
+            self.fraction = []
+            self.num = []
+            train_start_time = time.time()
             self._run_train_step(train_set, train_set_label, corruption_ratio)
+            self.train_time = time.time() - train_start_time
 
             if (i+1) % self.verbose_step == 0:
                 self._run_validation_error_and_summaries(i+1, validation_set, validation_set_label)
@@ -115,8 +121,8 @@ class DenoisingAutoencoderTripletOnline(DenoisingAutoencoder):
             self.train_cost[0].append(train_autoencoder_loss)
             self.train_cost[1].append(train_triplet_loss)
             self.train_cost[2].append(train_cost)
-            self.fraction = fraction_positive_triplet
-            self.num = num_positive_triplet
+            self.fraction.append(fraction_positive_triplet)
+            self.num.append(num_positive_triplet)
 
     def _run_validation_error_and_summaries(self, epoch, validation_set, validation_set_label):
 
@@ -129,8 +135,7 @@ class DenoisingAutoencoderTripletOnline(DenoisingAutoencoder):
         """
 
         if self.verbose == 1:
-            print('fraction_positive_triplet=%s\tnum_positive_triplet=%s' % (self.fraction,self.num))
-            print('At step %s: Training cost: Autoencoder=%s\tTriplet=%s\tOverall=%s' % (epoch, np.mean(self.train_cost[0]), np.mean(self.train_cost[1]),np.mean(self.train_cost[2])), end='')
+            print('At step %s (%d seconds): Positive Triplet: Fraction=%s\tNumber=%s\tTraining cost: Autoencoder=%s\tTriplet=%s\tOverall=%s' % (epoch, self.train_time, np.mean(self.fraction), np.mean(self.num), np.mean(self.train_cost[0]), np.mean(self.train_cost[1]),np.mean(self.train_cost[2])), end='')
 
         if validation_set is None: return
 

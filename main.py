@@ -3,6 +3,7 @@ import autoencoder.autoencoder_triplet as autoencoder_triplet
 import datasets.articles as articles
 import helpers
 from pathlib import Path
+from autoencoder import utils
 
 
 # Define path
@@ -117,7 +118,7 @@ if __name__ == '__main__':
     model.fit(trX, vlX, restore_previous_model=FLAGS.restore_previous_model)
 
     # Encode the data and store it
-    X_encoded = model.transform(X, name='full', save=FLAGS.encode_full)
+    X_encoded = model.transform(utils.decay_noise(X, FLAGS.corr_frac), name='full', save=FLAGS.encode_full)
 
     # Print top 10 similar articles
     article_binary_count_cosine_sim = helpers.pairwise_similarity(X, metric='cosine')

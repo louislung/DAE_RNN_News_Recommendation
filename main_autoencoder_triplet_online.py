@@ -3,6 +3,7 @@ from autoencoder.autoencoder_triplet import DenoisingAutoencoder
 from autoencoder.autoencoder_triplet_online import DenoisingAutoencoderTripletOnline
 import datasets.articles as articles
 import helpers
+from autoencoder import utils
 from pathlib import Path
 
 # Define path
@@ -98,6 +99,8 @@ if __name__ == '__main__':
         alpha=FLAGS.alpha)
 
     # Prepare data
+    row = 2000
+
     if FLAGS.restore_previous_data:
         article_contents = pd.read_parquet(model.data_dir + 'article_contents.snappy.parquet')
         X = sparse.load_npz(model.data_dir + 'article_contents_binary_count_vectorized.npz')
@@ -108,7 +111,7 @@ if __name__ == '__main__':
         count_vectorizer = joblib.load(model.data_dir + 'count_vectorizer.joblib')
         tfidf_transformer = joblib.load(model.data_dir + 'tfidf_transformer.joblib')
     else:
-        article_contents = articles.read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/latest.snappy.parquet')
+        article_contents = articles.read_articles(path='/Users/kitlunglaw/Documents/HK01/cache/s3/article_contents/latest.snappy.parquet')
         #article_contents = articles.similar_articles(article_contents, id_colname='article_id', cate_colname='title_group', min_cate=2, max_cate=20)
 
         title_group_value_counts = article_contents.title_group.value_counts()
@@ -121,7 +124,6 @@ if __name__ == '__main__':
 
         article_contents['label'] = pd.factorize(article_contents.category_publish_name)[0] + 1
 
-        row = 1500
         X_label = article_contents.label[0:row]
         count_vectorizer, X, X_pos, X_neg = articles.count_vectorize(
             article_contents.main_content[0:row],
@@ -148,10 +150,10 @@ if __name__ == '__main__':
         joblib.dump(count_vectorizer, model.data_dir + 'count_vectorizer.joblib')
         joblib.dump(tfidf_transformer, model.data_dir + 'tfidf_transformer.joblib')
 
-    trX = X[:-600]
-    trX_label = X_label[:-600]
-    vlX = X[-600:]
-    vlX_label = X_label[-600:]
+    trX = X[:int(-row*0.1)]
+    trX_label = X_label[:int(-row*0.1)]
+    vlX = X[int(-row*0.1):]
+    vlX_label = X_label[int(-row*0.1):]
     teX=None
 
     # Fit the model
@@ -160,7 +162,7 @@ if __name__ == '__main__':
     print('fit done')
 
     # Encode the data and store it
-    X_encoded = model.transform(X, name='full', save=FLAGS.encode_full)
+    X_encoded = model.transform(utils.decay_noise(X, FLAGS.corr_frac), name='full', save=FLAGS.encode_full)
 
     # Print top 10 similar articles
     article_binary_count_cosine_sim = helpers.pairwise_similarity(X, metric='cosine')
