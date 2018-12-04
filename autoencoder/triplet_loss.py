@@ -135,20 +135,20 @@ def batch_all_triplet_loss(sparse_input, input_label, input_data, encode, decode
         triplet_loss: scalar tensor containing the triplet loss
     """
     # Get the pairwise distance matrix
-    distances = tf.matmul(encode, tf.transpose(encode))
+    dotproduct = tf.matmul(encode, tf.transpose(encode))
 
     # shape (batch_size, batch_size, 1)
-    anchor_positive_dist = tf.expand_dims(distances, 2)
-    assert anchor_positive_dist.shape[2] == 1, "{}".format(anchor_positive_dist.shape)
+    anchor_positive_dotproduct = tf.expand_dims(dotproduct, 2)
+    assert anchor_positive_dotproduct.shape[2] == 1, "{}".format(anchor_positive_dotproduct.shape)
     # shape (batch_size, 1, batch_size)
-    anchor_negative_dist = tf.expand_dims(distances, 1)
-    assert anchor_negative_dist.shape[1] == 1, "{}".format(anchor_negative_dist.shape)
+    anchor_negative_dotproduct = tf.expand_dims(dotproduct, 1)
+    assert anchor_negative_dotproduct.shape[1] == 1, "{}".format(anchor_negative_dotproduct.shape)
 
     # Compute a 3D tensor of size (batch_size, batch_size, batch_size)
     # triplet_loss[i, j, k] will contain the triplet loss of anchor=i, positive=j, negative=k
     # Uses broadcasting where the 1st argument has shape (batch_size, batch_size, 1)
     # and the 2nd (batch_size, 1, batch_size)
-    triplet_loss = - tf.log_sigmoid(anchor_positive_dist - anchor_negative_dist)
+    triplet_loss = anchor_negative_dotproduct - anchor_positive_dotproduct
 
     # Put to zero the invalid triplets
     # (where label(a) != label(p) or label(n) == label(a) or a == p)
@@ -156,24 +156,26 @@ def batch_all_triplet_loss(sparse_input, input_label, input_data, encode, decode
     mask = tf.to_float(mask)
     triplet_loss = tf.multiply(mask, triplet_loss)
 
+    # Remove negative losses (i.e. the easy triplets)
+    triplet_loss = tf.maximum(triplet_loss, 0.0)
+
     # Count number of positive triplets (where triplet_loss > 0)
-    # valid_triplets = tf.to_float(tf.greater(triplet_loss, 1e-16))
-    # num_positive_triplets = tf.reduce_sum(valid_triplets)
-    # num_valid_triplets = tf.reduce_sum(mask)
-    # fraction_positive_triplets = num_positive_triplets / (num_valid_triplets + 1e-16)
+    positive_triplets = tf.to_float(tf.greater(triplet_loss, 1e-16))
+    num_positive_triplets = tf.reduce_sum(positive_triplets)
+    num_valid_triplets = tf.reduce_sum(mask)
+    fraction_positive_triplets = num_positive_triplets / (num_valid_triplets + 1e-16)
 
     # Get final mean triplet loss over the positive valid triplets
-    # triplet_loss = tf.reduce_sum(triplet_loss) / (num_positive_triplets + 1e-16)
-
-    triplet_loss = tf.reduce_mean(triplet_loss)
+    triplet_loss = - tf.log_sigmoid(-triplet_loss) * positive_triplets
+    triplet_loss = tf.reduce_sum(triplet_loss) / (num_positive_triplets + 1e-16)
 
     # Autoencoder element wise cross entropy loss
     _reduce_sum = tf.sparse.reduce_sum if sparse_input else tf.reduce_sum
 
-    cross_entropy_count = tf.reduce_sum(mask, [1, 2]) + tf.reduce_sum(mask, [0, 1]) + tf.reduce_sum(mask, [0, 2])
+    cross_entropy_count = tf.reduce_sum(positive_triplets, [1, 2]) + tf.reduce_sum(positive_triplets, [0, 1]) + tf.reduce_sum(positive_triplets, [0, 2])
     cross_entropy_loss = -_reduce_sum(input_data * tf.log(tf.clip_by_value(decode,1e-16,1.)), 1)
     cross_entropy_loss = tf.reduce_sum(cross_entropy_loss * cross_entropy_count)/(tf.reduce_sum(cross_entropy_count) + 1e-16)
-    return cross_entropy_loss, triplet_loss
+    return cross_entropy_loss, triplet_loss, fraction_positive_triplets, num_positive_triplets
 
 
 def batch_hard_triplet_loss(labels, embeddings, margin, squared=False):

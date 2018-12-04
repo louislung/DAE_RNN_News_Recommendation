@@ -17,6 +17,7 @@ FLAGS = flags.FLAGS
 
 # Global configuration
 flags.DEFINE_boolean('verbose', False, 'Level of verbosity. 0 - silent, 1 - print log')
+flags.DEFINE_integer('verbose_step', 5, 'Print log every x training steps')
 flags.DEFINE_boolean('encode_full', False, 'Whether to encode and store the full data set')
 
 # Count Vectorizer parameters
@@ -53,6 +54,7 @@ assert FLAGS.corr_type in ['masking', 'salt_and_pepper', 'decay', 'none']
 assert 0. <= FLAGS.corr_frac <= 1.
 assert FLAGS.loss_func in ['cross_entropy', 'mean_squared']
 assert FLAGS.opt in ['gradient_descent', 'ada_grad', 'momentum']
+assert FLAGS.verbose_step > 0
 
 if FLAGS.main_dir == '': FLAGS.main_dir = FLAGS.model_name
 
@@ -67,7 +69,7 @@ if __name__ == '__main__':
         corr_type=FLAGS.corr_type, corr_frac=FLAGS.corr_frac,
         loss_func=FLAGS.loss_func, main_dir=FLAGS.main_dir, opt=FLAGS.opt,
         learning_rate=FLAGS.learning_rate, momentum=FLAGS.momentum,
-        verbose=FLAGS.verbose, num_epochs=FLAGS.num_epochs, batch_size=FLAGS.batch_size,
+        verbose=FLAGS.verbose, verbose_step=FLAGS.verbose_step, num_epochs=FLAGS.num_epochs, batch_size=FLAGS.batch_size,
         alpha=FLAGS.alpha)
 
     # Prepare data

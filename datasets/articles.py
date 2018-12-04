@@ -45,7 +45,7 @@ def tokenizer_chinese(text):
 
 
 def read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/latest.snappy.parquet'):
-    """ Read articles data and map a positive and a negative article for every article
+    """ Read articles data
 
     :param path: path of parquet to be read
 

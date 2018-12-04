@@ -9,6 +9,12 @@ Refer to research [Embedding-based News Recommendation for Millions of Users](ht
 3. Data can be in the form of np.ndarray of scipy sparse matrix (e.g. csr_matrix)
 
 ---
+
+Two different training approaches implemented:
+1. The input data should include positive and negative items (autoencoder_triplet.py)
+2. Positive and negative items are found automatically during training (autoencoder_triplet_online.py)
+
+---
 Quick start
 
 Python version = 3.6.7

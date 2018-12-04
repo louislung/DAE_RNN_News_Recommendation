@@ -19,19 +19,22 @@ class DenoisingAutoencoderTripletOnline(DenoisingAutoencoder):
     def __init__(self, model_name='dae_tripletonline', compress_factor=10, main_dir='dae_tripletonline/', enc_act_func='tanh',
                  dec_act_func='none', loss_func='mean_squared', num_epochs=10, batch_size=10,
                  xavier_init=1, opt='gradient_descent', learning_rate=0.01, momentum=0.5, corr_type='none',
-                 corr_frac=0., verbose=True, seed=-1, alpha=1, triplet_strategy='batch_all'):
+                 corr_frac=0., verbose=True, verbose_step=5, seed=-1, alpha=1, triplet_strategy='batch_all'):
         """
         :param alpha:
         :param refer to class DenoisingAutoencoder
         """
 
         self.alpha = alpha
+
+        self.train_cost = ([], [], [])
+
         self.triplet_strategy = triplet_strategy
 
         super().__init__(model_name, compress_factor, main_dir, enc_act_func,
                          dec_act_func, loss_func, num_epochs, batch_size,
                          xavier_init, opt, learning_rate, momentum, corr_type,
-                         corr_frac, verbose, seed)
+                         corr_frac, verbose, verbose_step, seed)
 
     def fit(self, train_set, train_set_label, validation_set=None, validation_set_label=None, restore_previous_model=False):
         """ Fit the model to the data.
@@ -76,16 +79,14 @@ class DenoisingAutoencoderTripletOnline(DenoisingAutoencoder):
         corruption_ratio = np.round(self.corr_frac * train_set.shape[1]).astype(np.int)
 
         for i in range(self.num_epochs):
-            if i == 0:
-                self._run_validation_error_and_summaries(i, validation_set, validation_set_label)
-
+            self.train_cost = ([], [], [])
             self._run_train_step(train_set, train_set_label, corruption_ratio)
 
-            if (i+1) % 1 == 0:
+            if (i+1) % self.verbose_step == 0:
                 self._run_validation_error_and_summaries(i+1, validation_set, validation_set_label)
 
         else:
-            if (i+1) % 1 != 0:
+            if self.num_epochs!=0 and (i+1) % self.verbose_step != 0:
                 self._run_validation_error_and_summaries(self.num_epochs, validation_set, validation_set_label)
 
     def _run_train_step(self, train_set, train_set_label, corruption_ratio):
@@ -109,12 +110,13 @@ class DenoisingAutoencoderTripletOnline(DenoisingAutoencoder):
                 tr_feed = {self.input_data: utils.get_sparse_ind_val_shape(x_batch), self.input_data_corr: utils.get_sparse_ind_val_shape(x_corr_batch), self.input_label: x_batch_label}
             else:
                 tr_feed = {self.input_data: x_batch, self.input_data_corr: x_corr_batch, self.input_label: x_batch_label}
-            # print()
-            # print('autoencoder cost:', self.tf_session.run(self.autoencoder_loss, feed_dict=tr_feed))
-            # print('triplet cost:', self.tf_session.run(self.triplet_loss, feed_dict=tr_feed))
-            # print('overall cost:', self.tf_session.run(self.cost, feed_dict=tr_feed))
-            # print()
-            self.tf_session.run(self.train_step, feed_dict=tr_feed)
+            step, train_autoencoder_loss, train_triplet_loss, train_cost, fraction_positive_triplet, num_positive_triplet = self.tf_session.run([self.train_step, self.autoencoder_loss, self.triplet_loss, self.cost, self.fraction_positive_triplet, self.num_positive_triplet], feed_dict=tr_feed)
+
+            self.train_cost[0].append(train_autoencoder_loss)
+            self.train_cost[1].append(train_triplet_loss)
+            self.train_cost[2].append(train_cost)
+            self.fraction = fraction_positive_triplet
+            self.num = num_positive_triplet
 
     def _run_validation_error_and_summaries(self, epoch, validation_set, validation_set_label):
 
@@ -126,6 +128,10 @@ class DenoisingAutoencoderTripletOnline(DenoisingAutoencoder):
         :return: self
         """
 
+        if self.verbose == 1:
+            print('fraction_positive_triplet=%s\tnum_positive_triplet=%s' % (self.fraction,self.num))
+            print('At step %s: Training cost: Autoencoder=%s\tTriplet=%s\tOverall=%s' % (epoch, np.mean(self.train_cost[0]), np.mean(self.train_cost[1]),np.mean(self.train_cost[2])), end='')
+
         if validation_set is None: return
 
         if self.sparse_input:
@@ -136,12 +142,12 @@ class DenoisingAutoencoderTripletOnline(DenoisingAutoencoder):
 
         result = self.tf_session.run([self.tf_merged_summaries, self.autoencoder_loss, self.triplet_loss, self.cost], feed_dict=vl_feed)
         summary_str = result[0]
-        err = result[1]
 
         self.tf_summary_writer.add_summary(summary_str, epoch)
 
-        if self.verbose:
-            print("Validation cost at step %s: Autoencoder cost=%s\tTriplet cost=%s\tOverall cost=%s" % (epoch, result[1], result[2], result[3]))
+        if self.verbose == 1:
+            print("\tValidation cost: Autoencoder=%s\tTriplet=%s\tOverall=%s" % (result[1], result[2], result[3]), end='')
+            print()
 
     def _create_cost_function_node(self):
 
@@ -154,7 +160,7 @@ class DenoisingAutoencoderTripletOnline(DenoisingAutoencoder):
         with tf.name_scope("cost"):
             if self.loss_func == 'cross_entropy':
                 if self.triplet_strategy == 'batch_all':
-                    self.autoencoder_loss, self.triplet_loss = batch_all_triplet_loss(self.sparse_input, self.input_label, self.input_data, self.encode, self.decode)
+                    self.autoencoder_loss, self.triplet_loss, self.fraction_positive_triplet, self.num_positive_triplet = batch_all_triplet_loss(self.sparse_input, self.input_label, self.input_data, self.encode, self.decode)
                 self.cost = self.autoencoder_loss + self.alpha * self.triplet_loss
                 _ = tf.summary.scalar("cross_entropy", self.cost)
 

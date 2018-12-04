@@ -19,7 +19,7 @@ class DenoisingAutoencoder(object):
     def __init__(self, model_name='dae', compress_factor=10, main_dir='dae/', enc_act_func='tanh',
                  dec_act_func='none', loss_func='mean_squared', num_epochs=10, batch_size=10,
                  xavier_init=1, opt='gradient_descent', learning_rate=0.01, momentum=0.5, corr_type='none',
-                 corr_frac=0., verbose=True, seed=-1):
+                 corr_frac=0., verbose=True, verbose_step=5, seed=-1):
         """
         :param main_dir: main directory to put the models, data and summary directories
         :param compress_factor: number of hidden units = (input features divided by compress factor)
@@ -33,6 +33,7 @@ class DenoisingAutoencoder(object):
         :param corr_type: Type of input corruption. ["none", "masking", "salt_and_pepper", "decay]
         :param corr_frac: Fraction of the input to corrupt.
         :param verbose: Level of verbosity. False - silent, True - print accuracy.
+        :param verbose_step: print accuracy every x training steps
         :param num_epochs: Number of epochs
         :param batch_size: Size of each mini-batch
         :param seed: positive integer for seeding random generators. Ignored if < 0.
@@ -53,6 +54,7 @@ class DenoisingAutoencoder(object):
         self.corr_type = corr_type
         self.corr_frac = corr_frac
         self.verbose = verbose
+        self.verbose_step = verbose_step
         self.seed = seed
 
         if self.seed >= 0:
@@ -81,6 +83,9 @@ class DenoisingAutoencoder(object):
         self.tf_merged_summaries = None
         self.tf_summary_writer = None
         self.tf_saver = None
+
+        assert type(self.verbose_step) == int
+        assert self.verbose > 0
 
     def fit(self, train_set, validation_set=None, restore_previous_model=False):
         """ Fit the model to the data.
@@ -138,10 +143,10 @@ class DenoisingAutoencoder(object):
         for i in range(self.num_epochs):
             self._run_train_step(train_set, corruption_ratio)
 
-            if (i+1) % 5 == 0:
+            if (i+1) % self.verbose_step == 0:
                 self._run_validation_error_and_summaries(i+1, validation_set)
         else:
-            if (i+1) % 5 != 0:
+            if self.num_epochs!=0 and (i+1) % self.verbose_step != 0:
                 self._run_validation_error_and_summaries(i+1, validation_set)
 
     def _run_train_step(self, train_set, corruption_ratio):

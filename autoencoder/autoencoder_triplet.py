@@ -19,7 +19,7 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
     def __init__(self, model_name='dae_triplet', compress_factor=10, main_dir='dae_triplet/', enc_act_func='tanh',
                  dec_act_func='none', loss_func='mean_squared', num_epochs=10, batch_size=10,
                  xavier_init=1, opt='gradient_descent', learning_rate=0.01, momentum=0.5, corr_type='none',
-                 corr_frac=0., verbose=True, seed=-1, alpha=1):
+                 corr_frac=0., verbose=True, verbose_step=5, seed=-1, alpha=1):
         """
         :param alpha:
         :param refer to class DenoisingAutoencoder
@@ -38,7 +38,7 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
         super().__init__(model_name, compress_factor, main_dir, enc_act_func,
                          dec_act_func, loss_func, num_epochs, batch_size,
                          xavier_init, opt, learning_rate, momentum, corr_type,
-                         corr_frac, verbose, seed)
+                         corr_frac, verbose, verbose_step, seed)
 
     def fit(self, train_set, validation_set=None, restore_previous_model=False):
         """ Fit the model to the data.
@@ -110,10 +110,10 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
             self.train_cost = ([],[],[])
             self._run_train_step(train_set, corruption_ratio)
 
-            if (i+1) % 5 == 0:
+            if (i+1) % self.verbose_step == 0:
                 self._run_validation_error_and_summaries(i+1, validation_set)
         else:
-            if (i+1) % 5 != 0:
+            if self.num_epochs!=0 and (i+1) % self.verbose_step != 0:
                 self._run_validation_error_and_summaries(i+1, validation_set)
 
     def _run_train_step(self, train_set, corruption_ratio):

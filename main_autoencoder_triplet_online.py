@@ -17,6 +17,7 @@ FLAGS = flags.FLAGS
 
 # Global configuration
 flags.DEFINE_boolean('verbose', False, 'Level of verbosity. 0 - silent, 1 - print log')
+flags.DEFINE_integer('verbose_step', 5, 'Print log every x training steps')
 flags.DEFINE_boolean('encode_full', False, 'Whether to encode and store the full data set')
 
 # Count Vectorizer parameters
@@ -53,6 +54,7 @@ assert FLAGS.corr_type in ['masking', 'salt_and_pepper', 'decay', 'none']
 assert 0. <= FLAGS.corr_frac <= 1.
 assert FLAGS.loss_func in ['cross_entropy', 'mean_squared']
 assert FLAGS.opt in ['gradient_descent', 'ada_grad', 'momentum']
+assert FLAGS.verbose_step > 0
 
 if FLAGS.main_dir == '': FLAGS.main_dir = FLAGS.model_name
 
@@ -92,15 +94,16 @@ if __name__ == '__main__':
         corr_type=FLAGS.corr_type, corr_frac=FLAGS.corr_frac,
         loss_func=FLAGS.loss_func, main_dir=FLAGS.main_dir, opt=FLAGS.opt,
         learning_rate=FLAGS.learning_rate, momentum=FLAGS.momentum,
-        verbose=FLAGS.verbose, num_epochs=FLAGS.num_epochs, batch_size=FLAGS.batch_size,
+        verbose=FLAGS.verbose, verbose_step=FLAGS.verbose_step, num_epochs=FLAGS.num_epochs, batch_size=FLAGS.batch_size,
         alpha=FLAGS.alpha)
 
     # Prepare data
     if FLAGS.restore_previous_data:
         article_contents = pd.read_parquet(model.data_dir + 'article_contents.snappy.parquet')
         X = sparse.load_npz(model.data_dir + 'article_contents_binary_count_vectorized.npz')
-        X_pos = sparse.load_npz(model.data_dir + 'article_contents_binary_count_vectorized_pos.npz')
-        X_neg = sparse.load_npz(model.data_dir + 'article_contents_binary_count_vectorized_neg.npz')
+        #X_pos = sparse.load_npz(model.data_dir + 'article_contents_binary_count_vectorized_pos.npz')
+        #X_neg = sparse.load_npz(model.data_dir + 'article_contents_binary_count_vectorized_neg.npz')
+        X_label = pd.read_pickle(model.data_dir + 'article_contents_label.pkl')
         X_tfidf = sparse.load_npz(model.data_dir + 'article_contents_tfidf_vectorized.npz')
         count_vectorizer = joblib.load(model.data_dir + 'count_vectorizer.joblib')
         tfidf_transformer = joblib.load(model.data_dir + 'tfidf_transformer.joblib')
@@ -111,16 +114,19 @@ if __name__ == '__main__':
         title_group_value_counts = article_contents.title_group.value_counts()
         indices = article_contents.title_group.isin(title_group_value_counts[(title_group_value_counts>=2) & (title_group_value_counts<=100)].index)
 
-        article_contents['group'] = ''
-        article_contents.loc[indices,'group'] = article_contents[indices]['title_group']
-        article_contents.loc[~indices, 'group'] = article_contents[~indices]['main_category_id']
-        article_contents['label'] = pd.factorize(article_contents.group)[0] + 1
+        # article_contents['group'] = ''
+        # article_contents.loc[indices,'group'] = article_contents[indices]['title_group']
+        # article_contents.loc[~indices, 'group'] = article_contents[~indices]['category_publish_name']
+        # article_contents['label'] = pd.factorize(article_contents.group)[0] + 1
 
-        row = 1000
+        article_contents['label'] = pd.factorize(article_contents.category_publish_name)[0] + 1
+
+        row = 1500
+        X_label = article_contents.label[0:row]
         count_vectorizer, X, X_pos, X_neg = articles.count_vectorize(
             article_contents.main_content[0:row],
             #article_contents.main_content.loc[article_contents[article_contents.valid_triplet_data == 1].article_id_pos[0:row]],
-            #article_contents.main_content.loc[article_contents[article_contents.valid_triplet_data == 1].article_id_pos[0:row]],
+            #article_contents.main_content.loc[article_contents[article_contents.valid_triplet_data == 1].article_id_neg[0:row]],
             min_df=FLAGS.min_df,
             max_df=FLAGS.max_df,
             max_features=FLAGS.max_features,
@@ -129,7 +135,8 @@ if __name__ == '__main__':
         tfidf_transformer, X_tfidf = articles.tfidf_transform(X)
 
         # Save training data
-        #article_contents.to_parquet(model.data_dir + 'article_contents.snappy.parquet') #todo: urgent need to be fixed !!!!!!!!!!!!!
+        article_contents.to_parquet(model.data_dir + 'article_contents.snappy.parquet')
+        X_label.to_pickle(model.data_dir + 'article_contents_label.pkl')
         sparse.save_npz(model.data_dir + 'article_contents_count_vectorized.npz', X)
         X.data = np.array([1] * len(X.data))
         sparse.save_npz(model.data_dir + 'article_contents_binary_count_vectorized.npz', X)
@@ -141,22 +148,16 @@ if __name__ == '__main__':
         joblib.dump(count_vectorizer, model.data_dir + 'count_vectorizer.joblib')
         joblib.dump(tfidf_transformer, model.data_dir + 'tfidf_transformer.joblib')
 
-    # trX = {'org': X[:-100],
-    #        'pos': X_pos[:-100],
-    #        'neg': X_neg[:-100]}
-    # vlX = {'org': X[-100:],
-    #        'pos': X_pos[-100:],
-    #        'neg': X_neg[-100:]}
-    # teX = None
-
-    trX = X[:-100]
-    trX_label = article_contents.label[0:row][:-100]
-    vlX = X[-100:]
-    vlX_label = article_contents.label[0:row][-100:]
+    trX = X[:-600]
+    trX_label = X_label[:-600]
+    vlX = X[-600:]
+    vlX_label = X_label[-600:]
     teX=None
 
     # Fit the model
+    print('fit')
     model.fit(trX, trX_label, vlX, vlX_label, restore_previous_model=FLAGS.restore_previous_model)
+    print('fit done')
 
     # Encode the data and store it
     X_encoded = model.transform(X, name='full', save=FLAGS.encode_full)
