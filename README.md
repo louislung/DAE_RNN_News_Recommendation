@@ -1,6 +1,6 @@
 # DAE_RNN_News_Recommendation
 
-Refer to research [Embedding-based News Recommendation for Millions of Users](https://www.kdd.org/kdd2017/papers/view/embedding-based-news-recommendation-for-millions-of-users) published by Yahoo! Japan which aims to use embeddings of articles and user to provide news recommendations.
+Refer to research [Embedding-based News Recommendation for Millions of Users](https://www.kdd.org/kdd2017/papers/view/embedding-based-news-recommendation-for-millions-of-users)  and [Article De-duplication Using Distributed Representations](http://gdac.uqam.ca/WWW2016-Proceedings/companion/p87.pdf) published by Yahoo! Japan which aims to use embeddings of articles and user to provide news recommendations.
 
 ---
 
