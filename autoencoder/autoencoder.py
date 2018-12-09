@@ -16,7 +16,7 @@ class DenoisingAutoencoder(object):
     The interface of the class is sklearn-like.
     """
 
-    def __init__(self, model_name='dae', compress_factor=10, main_dir='dae/', enc_act_func='tanh',
+    def __init__(self, algo_name='dae', model_name='dae', compress_factor=10, main_dir='dae/', enc_act_func='tanh',
                  dec_act_func='none', loss_func='mean_squared', num_epochs=10, batch_size=10,
                  xavier_init=1, opt='gradient_descent', learning_rate=0.01, momentum=0.5, corr_type='none',
                  corr_frac=0., verbose=True, verbose_step=5, seed=-1):
@@ -39,6 +39,7 @@ class DenoisingAutoencoder(object):
         :param seed: positive integer for seeding random generators. Ignored if < 0.
         """
 
+        self.algo_name = algo_name
         self.model_name = model_name
         self.compress_factor = compress_factor
         self.main_dir = main_dir
@@ -87,6 +88,30 @@ class DenoisingAutoencoder(object):
         assert type(self.verbose_step) == int
         assert self.verbose > 0
 
+    def _write_parameter_to_file(self, restore):
+        self.parameter_file = self.tf_summary_dir + 'parameter.txt'
+        mode = 'a+' if restore else 'w'
+        with open(self.parameter_file, mode) as text_file:
+            print('algo_name={}'.format(self.algo_name), file=text_file)
+            print('model_name={}'.format(self.model_name), file=text_file)
+            print('compress_factor={}'.format(self.compress_factor), file=text_file)
+            print('main_dir={}'.format(self.main_dir), file=text_file)
+            print('enc_act_func={}'.format(self.enc_act_func), file=text_file)
+            print('dec_act_func={}'.format(self.dec_act_func), file=text_file)
+            print('loss_func={}'.format(self.loss_func), file=text_file)
+            print('num_epochs={}'.format(self.num_epochs), file=text_file)
+            print('batch_size={}'.format(self.batch_size), file=text_file)
+            print('xavier_init={}'.format(self.xavier_init), file=text_file)
+            print('opt={}'.format(self.opt), file=text_file)
+            print('learning_rate={}'.format(self.learning_rate), file=text_file)
+            print('momentum={}'.format(self.momentum), file=text_file)
+            print('corr_type={}'.format(self.corr_type), file=text_file)
+            print('corr_frac={}'.format(self.corr_frac), file=text_file)
+            print('verbose={}'.format(self.verbose), file=text_file)
+            print('verbose_step={}'.format(self.verbose_step), file=text_file)
+            print('seed={}'.format(self.seed), file=text_file)
+            print('---------------------------------------',file=text_file)
+
     def fit(self, train_set, validation_set=None, restore_previous_model=False):
         """ Fit the model to the data.
 
@@ -104,6 +129,8 @@ class DenoisingAutoencoder(object):
         self.n_components = np.floor(n_features / self.compress_factor).astype(int)
 
         self._build_model(n_features)
+
+        self._write_parameter_to_file(restore_previous_model)
 
         with tf.Session() as self.tf_session:
 
@@ -126,7 +153,8 @@ class DenoisingAutoencoder(object):
         if restore_previous_model:
             self.tf_saver.restore(self.tf_session, self.model_path)
 
-        self.tf_summary_writer = tf.summary.FileWriter(self.tf_summary_dir, self.tf_session.graph)
+        self.tf_summary_writer = tf.summary.FileWriter(self.tf_summary_dir + 'train/', self.tf_session.graph)
+        self.tf_validation_summary_writer = tf.summary.FileWriter(self.tf_summary_dir + 'validation/')
 
     def _train_model(self, train_set, validation_set):
 
@@ -367,8 +395,12 @@ class DenoisingAutoencoder(object):
                 # input_data_corr is a sparse tensor
                 encoded_data = self.encode.eval({self.input_data_corr: utils.get_sparse_ind_val_shape(data)})
 
+            weights = self.W_.eval()
+
             if save:
+                print(self.data_dir + self.model_name + '-' + name)
                 np.save(self.data_dir + self.model_name + '-' + name, encoded_data)
+                np.save(self.data_dir + 'weights', weights)
 
             return encoded_data
 
@@ -417,7 +449,7 @@ class DenoisingAutoencoder(object):
         :return: tuple of strings(models_dir, data_dir, summary_dir)
         """
 
-        self.main_dir = self.main_dir + '/' if self.main_dir[-1] != '/' else self.main_dir
+        self.main_dir = (self.algo_name + '/' if self.algo_name[-1] != '/' else self.algo_name) + (self.main_dir + '/' if self.main_dir[-1] != '/' else self.main_dir)
 
         models_dir = 'results/' + self.main_dir + 'models/'
         data_dir = 'results/' + self.main_dir + 'data/'

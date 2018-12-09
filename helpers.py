@@ -1,6 +1,14 @@
 from sklearn.metrics import pairwise
 from sklearn.preprocessing import normalize
-import numpy as np
+from sklearn.decomposition import TruncatedSVD, PCA
+from sklearn.manifold import TSNE
+import numpy as np, pandas as pd
+from matplotlib import pyplot as plt, font_manager as mfm
+
+
+font_path = "/System/Library/Fonts/PingFang.ttc"
+fontproperties = mfm.FontProperties(fname=font_path)
+
 
 def pairwise_similarity(in_df, norm='', metric='cosine', set_diagonal_zero=True, **metric_param):
     """ Read articles data and map a positive and a negative article for every article
@@ -42,6 +50,32 @@ def pairwise_similarity(in_df, norm='', metric='cosine', set_diagonal_zero=True,
         np.fill_diagonal(out_df, 0)
 
     return out_df
+
+
+def visualize_scatter(data_2d, label, title, figsize=(20, 20), save_path=None):
+    plt.figure(figsize=figsize)
+    plt.grid()
+
+    label_factorizer = pd.factorize(label)
+    label_ids = label_factorizer[0]
+
+    nb_classes = len(np.unique(label_ids))
+
+    for label_id in np.unique(label_ids):
+        plt.scatter(data_2d[np.where(label_ids == label_id), 0],
+                    data_2d[np.where(label_ids == label_id), 1],
+                    marker='o',
+                    color=plt.cm.gist_ncar((label_id + 1) / float(nb_classes)),
+                    linewidth='1',
+                    alpha=0.8,
+                    label=label_factorizer[1][label_id])
+    plt.legend(loc='best', prop=fontproperties)
+
+    if title is not None:
+        plt.title(title)
+
+    if save_path is not None:
+        plt.savefig(save_path)
 
 
 if __name__ == '__main__':

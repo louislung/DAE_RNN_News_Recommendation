@@ -4,7 +4,7 @@ from pathlib import Path
 
 from . import utils
 from .autoencoder import DenoisingAutoencoder
-from .triplet_loss import batch_all_triplet_loss
+from .triplet_loss import batch_all_triplet_loss, batch_hard_triplet_loss
 
 # Define path
 _script_path = Path(os.path.dirname(os.path.realpath(__file__)))
@@ -16,7 +16,7 @@ class DenoisingAutoencoderTripletOnline(DenoisingAutoencoder):
     The interface of the class is sklearn-like.
     """
 
-    def __init__(self, model_name='dae_tripletonline', compress_factor=10, main_dir='dae_tripletonline/', enc_act_func='tanh',
+    def __init__(self, algo_name='dae_triplet_online', model_name='dae_triplet_online', compress_factor=10, main_dir='dae_triplet_online/', enc_act_func='tanh',
                  dec_act_func='none', loss_func='mean_squared', num_epochs=10, batch_size=10,
                  xavier_init=1, opt='gradient_descent', learning_rate=0.01, momentum=0.5, corr_type='none',
                  corr_frac=0., verbose=True, verbose_step=5, seed=-1, alpha=1, triplet_strategy='batch_all'):
@@ -33,10 +33,36 @@ class DenoisingAutoencoderTripletOnline(DenoisingAutoencoder):
 
         self.triplet_strategy = triplet_strategy
 
-        super().__init__(model_name, compress_factor, main_dir, enc_act_func,
+        super().__init__(algo_name, model_name, compress_factor, main_dir, enc_act_func,
                          dec_act_func, loss_func, num_epochs, batch_size,
                          xavier_init, opt, learning_rate, momentum, corr_type,
                          corr_frac, verbose, verbose_step, seed)
+
+    def _write_parameter_to_file(self, restore):
+        self.parameter_file = self.tf_summary_dir + 'parameter.txt'
+        mode = 'a+' if restore else 'w'
+        with open(self.parameter_file, mode) as text_file:
+            print('---------------------------------------', file=text_file)
+            print('algo_name={}'.format(self.algo_name), file=text_file)
+            print('model_name={}'.format(self.model_name), file=text_file)
+            print('compress_factor={}'.format(self.compress_factor), file=text_file)
+            print('main_dir={}'.format(self.main_dir), file=text_file)
+            print('enc_act_func={}'.format(self.enc_act_func), file=text_file)
+            print('dec_act_func={}'.format(self.dec_act_func), file=text_file)
+            print('loss_func={}'.format(self.loss_func), file=text_file)
+            print('num_epochs={}'.format(self.num_epochs), file=text_file)
+            print('batch_size={}'.format(self.batch_size), file=text_file)
+            print('xavier_init={}'.format(self.xavier_init), file=text_file)
+            print('opt={}'.format(self.opt), file=text_file)
+            print('learning_rate={}'.format(self.learning_rate), file=text_file)
+            print('momentum={}'.format(self.momentum), file=text_file)
+            print('corr_type={}'.format(self.corr_type), file=text_file)
+            print('corr_frac={}'.format(self.corr_frac), file=text_file)
+            print('verbose={}'.format(self.verbose), file=text_file)
+            print('verbose_step={}'.format(self.verbose_step), file=text_file)
+            print('seed={}'.format(self.seed), file=text_file)
+            print('alpha={}'.format(self.alpha), file=text_file)
+            print('triplet_strategy={}'.format(self.triplet_strategy), file=text_file)
 
     def fit(self, train_set, train_set_label, validation_set=None, validation_set_label=None, restore_previous_model=False):
         """ Fit the model to the data.
@@ -61,6 +87,8 @@ class DenoisingAutoencoderTripletOnline(DenoisingAutoencoder):
 
         self.input_label = tf.placeholder('float', name='x-input-label')
         self._build_model(n_features)
+
+        self._write_parameter_to_file(restore_previous_model)
 
         with tf.Session() as self.tf_session:
 
@@ -135,7 +163,15 @@ class DenoisingAutoencoderTripletOnline(DenoisingAutoencoder):
         """
 
         if self.verbose == 1:
-            print('At step %s (%d seconds): Positive Triplet: Fraction=%s\tNumber=%s\tTraining cost: Autoencoder=%s\tTriplet=%s\tOverall=%s' % (epoch, self.train_time, np.mean(self.fraction), np.mean(self.num), np.mean(self.train_cost[0]), np.mean(self.train_cost[1]),np.mean(self.train_cost[2])), end='')
+            print('At step %d (%.2f seconds): ' % (epoch, self.train_time), end='')
+            print('Positive Triplet: ', end='')
+            if (self.fraction.count(None) != len(self.fraction)): print('Fraction=%.4f\t' % np.mean(self.fraction), end='')
+            if (self.num.count(None) != len(self.num)): print('Number=%d\t' % np.mean(self.num), end='')
+            print('Training cost: ', end='')
+            print('Autoencoder=%.4f\t' % np.mean(self.train_cost[0]), end='')
+            print('Triplet=%.4f\t' % np.mean(self.train_cost[1]), end='')
+            print('Overall=%.4f' % (np.mean(self.train_cost[2])), end='')
+            print()
 
         if validation_set is None: return
 
@@ -148,10 +184,10 @@ class DenoisingAutoencoderTripletOnline(DenoisingAutoencoder):
         result = self.tf_session.run([self.tf_merged_summaries, self.autoencoder_loss, self.triplet_loss, self.cost], feed_dict=vl_feed)
         summary_str = result[0]
 
-        self.tf_summary_writer.add_summary(summary_str, epoch)
+        self.tf_validation_summary_writer.add_summary(summary_str, epoch)
 
         if self.verbose == 1:
-            print("\tValidation cost: Autoencoder=%s\tTriplet=%s\tOverall=%s" % (result[1], result[2], result[3]), end='')
+            print("\tValidation cost: Autoencoder=%.4f\tTriplet=%.4f\tOverall=%.4f" % (result[1], result[2], result[3]), end='')
             print()
 
     def _create_cost_function_node(self):
@@ -165,7 +201,11 @@ class DenoisingAutoencoderTripletOnline(DenoisingAutoencoder):
         with tf.name_scope("cost"):
             if self.loss_func == 'cross_entropy':
                 if self.triplet_strategy == 'batch_all':
-                    self.autoencoder_loss, self.triplet_loss, self.fraction_positive_triplet, self.num_positive_triplet = batch_all_triplet_loss(self.sparse_input, self.input_label, self.input_data, self.encode, self.decode)
+                    _batch_loss = batch_all_triplet_loss
+                elif self.triplet_strategy == 'batch_hard':
+                    _batch_loss = batch_hard_triplet_loss
+
+                self.autoencoder_loss, self.triplet_loss, self.fraction_positive_triplet, self.num_positive_triplet = _batch_loss(self.sparse_input, self.input_label, self.input_data, self.encode, self.decode)
                 self.cost = self.autoencoder_loss + self.alpha * self.triplet_loss
                 _ = tf.summary.scalar("cross_entropy", self.cost)
 
