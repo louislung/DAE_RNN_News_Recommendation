@@ -1,8 +1,9 @@
 import tensorflow as tf
-import numpy as np, os
+import numpy as np, os, time
 from pathlib import Path
 
 from . import utils
+from .triplet_loss_utils import weighted_loss
 from .autoencoder import DenoisingAutoencoder
 
 
@@ -16,7 +17,7 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
     The interface of the class is sklearn-like.
     """
 
-    def __init__(self, algo_name='dae', model_name='dae_triplet', compress_factor=10, main_dir='dae_triplet/', enc_act_func='tanh',
+    def __init__(self, algo_name='dae_triplet', model_name='dae_triplet', compress_factor=10, main_dir='dae_triplet/', enc_act_func='tanh',
                  dec_act_func='none', loss_func='mean_squared', num_epochs=10, batch_size=10,
                  xavier_init=1, opt='gradient_descent', learning_rate=0.01, momentum=0.5, corr_type='none',
                  corr_frac=0., verbose=True, verbose_step=5, seed=-1, alpha=1):
@@ -25,46 +26,16 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
         :param refer to class DenoisingAutoencoder
         """
 
-        self.alpha = alpha
+        super().__init__(algo_name=algo_name, model_name=model_name, compress_factor=compress_factor, main_dir=main_dir, enc_act_func=enc_act_func,
+                         dec_act_func=dec_act_func, loss_func=loss_func, num_epochs=num_epochs, batch_size=batch_size,
+                         xavier_init=xavier_init, opt=opt, learning_rate=learning_rate, momentum=momentum, corr_type=corr_type,
+                         corr_frac=corr_frac, verbose=verbose, verbose_step=verbose_step, seed=seed, alpha=alpha, triplet_strategy='none')
 
         self.input_data_pos = None
         self.input_data_corr_pos = None
 
         self.input_data_neg = None
         self.input_data_corr_neg = None
-
-        self.train_cost = ([], [], [])
-        self.train_time = None
-
-        super().__init__(algo_name, model_name, compress_factor, main_dir, enc_act_func,
-                         dec_act_func, loss_func, num_epochs, batch_size,
-                         xavier_init, opt, learning_rate, momentum, corr_type,
-                         corr_frac, verbose, verbose_step, seed)
-
-    def _write_parameter_to_file(self, restore):
-        self.parameter_file = self.tf_summary_dir + 'parameter.txt'
-        mode = 'a+' if restore else 'w'
-        with open(self.parameter_file, mode) as text_file:
-            print('algo_name={}'.format(self.algo_name), file=text_file)
-            print('model_name={}'.format(self.model_name), file=text_file)
-            print('compress_factor={}'.format(self.compress_factor), file=text_file)
-            print('main_dir={}'.format(self.main_dir), file=text_file)
-            print('enc_act_func={}'.format(self.enc_act_func), file=text_file)
-            print('dec_act_func={}'.format(self.dec_act_func), file=text_file)
-            print('loss_func={}'.format(self.loss_func), file=text_file)
-            print('num_epochs={}'.format(self.num_epochs), file=text_file)
-            print('batch_size={}'.format(self.batch_size), file=text_file)
-            print('xavier_init={}'.format(self.xavier_init), file=text_file)
-            print('opt={}'.format(self.opt), file=text_file)
-            print('learning_rate={}'.format(self.learning_rate), file=text_file)
-            print('momentum={}'.format(self.momentum), file=text_file)
-            print('corr_type={}'.format(self.corr_type), file=text_file)
-            print('corr_frac={}'.format(self.corr_frac), file=text_file)
-            print('verbose={}'.format(self.verbose), file=text_file)
-            print('verbose_step={}'.format(self.verbose_step), file=text_file)
-            print('seed={}'.format(self.seed), file=text_file)
-            print('alpha={}'.format(self.alpha), file=text_file)
-            print('---------------------------------------', file=text_file)
 
     def fit(self, train_set, validation_set=None, restore_previous_model=False):
         """ Fit the model to the data.
@@ -105,23 +76,6 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
             self._train_model(train_set, validation_set)
             self.tf_saver.save(self.tf_session, self.models_dir + self.model_name) #todo: should save to another model_name if model already exists?
 
-    def _initialize_tf_utilities_and_ops(self, restore_previous_model):
-
-        """ Initialize TensorFlow operations: summaries, init operations, saver, summary_writer.
-        Restore a previously trained model if the flag restore_previous_model is true.
-        """
-
-        self.tf_merged_summaries = tf.summary.merge_all()
-        init_op = tf.global_variables_initializer()
-        self.tf_saver = tf.train.Saver()
-
-        self.tf_session.run(init_op)
-
-        if restore_previous_model:
-            self.tf_saver.restore(self.tf_session, self.model_path)
-
-        self.tf_summary_writer = tf.summary.FileWriter(self.tf_summary_dir, self.tf_session.graph)
-
     def _train_model(self, train_set, validation_set):
 
         """Train the model.
@@ -135,12 +89,17 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
         corruption_ratio = np.round(self.corr_frac * train_set['org'].shape[1]).astype(np.int)
 
         for i in range(self.num_epochs):
-            self.train_cost = ([],[],[])
+            self.train_cost_batch = [], [], []
+            train_start_time = time.time()
+
             self._run_train_step(train_set, corruption_ratio)
+
+            self.train_time = time.time() - train_start_time
 
             if (i+1) % self.verbose_step == 0:
                 self._run_validation_error_and_summaries(i+1, validation_set)
         else:
+            # run once when training is done
             if self.num_epochs!=0 and (i+1) % self.verbose_step != 0:
                 self._run_validation_error_and_summaries(i+1, validation_set)
 
@@ -159,7 +118,7 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
         for key in train_set:
             x_corrupted[key] = self._corrupt_input(train_set[key], corruption_ratio)
 
-        batches = [_ for _ in utils.gen_batches_triplet(train_set, x_corrupted, self.batch_size, self.sparse_input)]
+        batches = [_ for _ in utils.gen_batches_triplet(train_set, x_corrupted, self.batch_size)]
 
         for batch in batches:
             x_batch, x_corr_batch = batch
@@ -179,9 +138,9 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
                            self.input_data_corr_neg: x_corr_batch[2]}
             step, train_autoencoder_loss, train_triplet_loss, train_cost = self.tf_session.run([self.train_step,self.autoencoder_loss,self.triplet_loss,self.cost], feed_dict=tr_feed)
 
-            self.train_cost[0].append(train_autoencoder_loss)
-            self.train_cost[1].append(train_triplet_loss)
-            self.train_cost[2].append(train_cost)
+            self.train_cost_batch[0].append(train_cost)
+            self.train_cost_batch[1].append(train_autoencoder_loss)
+            self.train_cost_batch[2].append(train_triplet_loss)
 
     def _run_validation_error_and_summaries(self, epoch, validation_set):
 
@@ -194,7 +153,12 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
         """
 
         if self.verbose == 1:
-            print('At step %d: Training cost: Autoencoder=%.4f\tTriplet=%.4f\tOverall=%.4f' % (epoch, np.mean(self.train_cost[0]), np.mean(self.train_cost[1]),np.mean(self.train_cost[2])), end='')
+            print('At step %d (%.2f seconds): ' % (epoch, self.train_time), end='')
+            print('[Train Stat (average over past steps)] - ', end='')
+            print('Cost: ', end='')
+            print('Overall=%.4f\t' % (np.mean(self.train_cost_batch[0])), end='')
+            print('Autoencoder=%.4f\t' % np.mean(self.train_cost_batch[1]), end='')
+            print('Triplet=%.4f\t' % np.mean(self.train_cost_batch[2]), end='')
 
         if validation_set is None:
             print()
@@ -218,13 +182,16 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
                        self.input_data_corr_pos: validation_set['pos'],
                        self.input_data_corr_neg: validation_set['neg']}
 
-        result = self.tf_session.run([self.tf_merged_summaries, self.autoencoder_loss, self.triplet_loss, self.cost], feed_dict=vl_feed)
-        summary_str = result[0]
+        result = self.tf_session.run([self.tf_merged_summaries, self.cost, self.autoencoder_loss, self.triplet_loss], feed_dict=vl_feed)
 
+        summary_str = result[0]
         self.tf_summary_writer.add_summary(summary_str, epoch)
 
-        if self.verbose == 1:
-            print("\tValidation cost: Autoencoder=%.4f\tTriplet=%.4f\tOverall=%.4f" % (result[1], result[2], result[3]), end='')
+        if self.verbose:
+            print("[Validation Stat (at this step)] - Cost: ", end='')
+            print('Overall=%.4f\t' % (result[1]), end='')
+            print('Autoencoder=%.4f\t' % (result[2]), end='')
+            print('Triplet=%.4f\t' % (result[3]), end='')
             print()
 
     def _build_model(self, n_features):
@@ -316,53 +283,17 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
         :return: self
         """
 
-        _reduce_sum = tf.sparse.reduce_sum if self.sparse_input else tf.reduce_sum
-
         with tf.name_scope("cost"):
-            if self.loss_func == 'cross_entropy':
-                self.autoencoder_loss = - tf.reduce_mean(_reduce_sum(self.input_data.__mul__(tf.log(tf.clip_by_value(self.decode,1e-16,1.)))))
-                self.autoencoder_loss += - tf.reduce_mean(_reduce_sum(self.input_data_pos.__mul__(tf.log(tf.clip_by_value(self.decode_pos,1e-16,1.)))))
-                self.autoencoder_loss += - tf.reduce_mean(_reduce_sum(self.input_data_neg.__mul__(tf.log(tf.clip_by_value(self.decode_neg,1e-16,1.)))))
-                self.triplet_loss = tf.reduce_mean(-tf.log_sigmoid(tf.reduce_sum(
-                    (self.encode * self.encode_pos) -
-                    (self.encode * self.encode_neg)
-                ,1)))
-                self.cost = self.autoencoder_loss + self.alpha * self.triplet_loss
-                _ = tf.summary.scalar("cross_entropy", self.cost)
+            self.autoencoder_loss = weighted_loss(self.sparse_input, self.input_data, self.decode, loss_func=self.loss_func) + \
+                                    weighted_loss(self.sparse_input, self.input_data_pos, self.decode_pos, loss_func=self.loss_func) + \
+                                    weighted_loss(self.sparse_input, self.input_data_neg, self.decode_neg, loss_func=self.loss_func)
+            _ = tf.summary.scalar(self.loss_func, self.autoencoder_loss)
 
-            elif self.loss_func == 'mean_squared':
-                self.cost = tf.sqrt(tf.reduce_mean(tf.square(self.input_data - self.decode)))
-                _ = tf.summary.scalar("mean_squared", self.cost)
+            self.triplet_loss = tf.reduce_mean(-tf.log_sigmoid(tf.reduce_sum(
+                (self.encode * self.encode_pos) -
+                (self.encode * self.encode_neg)
+                , 1)))
+            _ = tf.summary.scalar('triplet', self.triplet_loss)
 
-            else:
-                self.cost = None
-
-    def _create_train_step_node(self):
-
-        """ create the training step node of the network.
-        :return: self
-        """
-
-        with tf.name_scope("train"):
-            if self.opt == 'gradient_descent':
-                self.train_step = tf.train.GradientDescentOptimizer(self.learning_rate).minimize(self.cost)
-
-                # Below are used for debug purpose only
-                # [self.grad_W, self.grad_bh] = tf.gradients(self.cost, [self.W_, self.bh_])
-                # self.new_W = self.W_.assign(self.W_ - self.learning_rate * self.grad_W)
-                # self.new_bv = self.bv_.assign(self.bv_ - self.learning_rate * self.grad_bv)
-                # self.new_bh = self.bh_.assign(self.bh_ - self.learning_rate * self.grad_bh)
-                # self.train_step = [self.new_W, self.new_bh]
-
-                # self.optimizer = tf.train.GradientDescentOptimizer(self.learning_rate)
-                # self.grads_and_vars = self.optimizer.compute_gradients(self.cost, [self.W_, self.bv_, self.bh_])
-                # self.train_step = self.optimizer.apply_gradients(self.grads_and_vars)
-
-            elif self.opt == 'ada_grad':
-                self.train_step = tf.train.AdagradOptimizer(self.learning_rate).minimize(self.cost)
-
-            elif self.opt == 'momentum':
-                self.train_step = tf.train.MomentumOptimizer(self.learning_rate, self.momentum).minimize(self.cost)
-
-            else:
-                self.train_step = None
+            self.cost = self.autoencoder_loss + self.alpha * self.triplet_loss
+            _ = tf.summary.scalar("overall_cost", self.cost)
