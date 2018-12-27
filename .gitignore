@@ -5,3 +5,4 @@ autoencoder/logs
 autoencoder/models
 results
 _obsolete
+.DS_Store

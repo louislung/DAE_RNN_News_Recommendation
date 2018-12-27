@@ -143,7 +143,7 @@ def count_vectorize(in_series, in_pos_series=None, in_neg_series=None, tokenizer
     :return: CountVectorizer and output from CountVectorizer
     :rtype: csr_matrix
     """
-    count_vectorizer = CountVectorizer(tokenizer=tokenizer, **param_count_vectorizer) #todo: allows to restore count vectorizer
+    count_vectorizer = CountVectorizer(tokenizer=tokenizer, **param_count_vectorizer)
 
     X = count_vectorizer.fit_transform(in_series)
     # Only do transform for in_pos_series and in_neg_series so all output have same number of features (columns)

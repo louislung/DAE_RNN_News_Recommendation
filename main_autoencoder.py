@@ -191,7 +191,7 @@ if __name__ == '__main__':
 
         # Save in tsv format for visualization in tensorboard (http://projector.tensorflow.org/)
         helpers.save_file(X_tfidf, model.tsv_dir + 'article_tfidf_vectorized.tsv')
-        helpers.save_file(X_tfidf_validate, model.tsv_dir + 'article_tfidf_vectorized.tsv')
+        helpers.save_file(X_tfidf_validate, model.tsv_dir + 'article_tfidf_vectorized_validate.tsv')
         helpers.save_file(X, model.tsv_dir + 'article_binary_count_vectorized.tsv')
         helpers.save_file(X_validate, model.tsv_dir + 'article_binary_count_vectorized_validate.tsv')
         helpers.save_file(article_contents.iloc[0:train_row,][['label_title_group', 'label_category_publish_name', 'title', 'title_group', 'category_publish_name']], model.tsv_dir + 'article_label.tsv')

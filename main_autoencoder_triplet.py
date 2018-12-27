@@ -93,7 +93,7 @@ if __name__ == '__main__':
     if FLAGS.restore_previous_data:
         # restore data
         article_contents = helpers.read_file(model.data_dir + 'article.snappy.parquet')
-        article_contents.append(helpers.read_file(model.data_dir + 'article_validate.snappy.parquet'))
+        article_contents = article_contents.append(helpers.read_file(model.data_dir + 'article_validate.snappy.parquet'))
         X = helpers.read_file(model.data_dir + 'article_binary_count_vectorized.npz')
         X_pos = helpers.read_file(model.data_dir + 'article_binary_count_vectorized_pos.npz')
         X_neg = helpers.read_file(model.data_dir + 'article_binary_count_vectorized_neg.npz')
@@ -150,6 +150,8 @@ if __name__ == '__main__':
         X_validate_pos = count_vectorizer.transform(article_contents.main_content.loc[article_contents[article_contents.valid_triplet_data == 1].article_id_pos[train_row:validate_row + train_row]])
         X_validate_neg = count_vectorizer.transform(article_contents.main_content.loc[article_contents[article_contents.valid_triplet_data == 1].article_id_neg[train_row:validate_row + train_row]])
 
+        article_contents = article_contents[article_contents.valid_triplet_data == 1]
+
         tfidf_transformer, X_tfidf = articles.tfidf_transform(X)
         X_tfidf_pos = tfidf_transformer.transform(X_pos)
         X_tfidf_neg = tfidf_transformer.transform(X_neg)
@@ -192,7 +194,7 @@ if __name__ == '__main__':
 
         # Save in tsv format for visualization in tensorboard (http://projector.tensorflow.org/)
         helpers.save_file(X_tfidf, model.tsv_dir + 'article_tfidf_vectorized.tsv')
-        helpers.save_file(X_tfidf_validate, model.tsv_dir + 'article_tfidf_vectorized.tsv')
+        helpers.save_file(X_tfidf_validate, model.tsv_dir + 'article_tfidf_vectorized_validate.tsv')
         helpers.save_file(X, model.tsv_dir + 'article_binary_count_vectorized.tsv')
         helpers.save_file(X_validate, model.tsv_dir + 'article_binary_count_vectorized_validate.tsv')
         helpers.save_file(article_contents.iloc[0:train_row, ][['label_title_group', 'label_category_publish_name', 'title', 'title_group', 'category_publish_name']], model.tsv_dir + 'article_label.tsv')
