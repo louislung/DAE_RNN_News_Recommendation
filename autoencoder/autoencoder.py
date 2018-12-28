@@ -151,6 +151,8 @@ class DenoisingAutoencoder(object):
 
             self._initialize_tf_utilities_and_ops(restore_previous_model)
             self._train_model(train_set, validation_set, train_set_label=train_set_label, validation_set_label=validation_set_label)
+            self.tf_summary_writer.close()
+            self.tf_validation_summary_writer.close()
             self.tf_saver.save(self.tf_session, self.models_dir + self.model_name) #todo: should save to another model_name if model already exists?
 
     def _initialize_tf_utilities_and_ops(self, restore_previous_model):
@@ -162,7 +164,6 @@ class DenoisingAutoencoder(object):
         self.tf_merged_summaries = tf.summary.merge_all()
         init_op = tf.global_variables_initializer()
         self.tf_saver = tf.train.Saver()
-
         self.tf_session.run(init_op)
 
         if restore_previous_model:
@@ -191,7 +192,7 @@ class DenoisingAutoencoder(object):
             self.num_triplet_batch = [] # number of triplet used for training
             train_start_time = time.time()
 
-            self._run_train_step(train_set, train_set_label, corruption_ratio)
+            self._run_train_step(train_set, train_set_label, corruption_ratio, i+1)
 
             self.train_time = time.time() - train_start_time
 
@@ -202,7 +203,7 @@ class DenoisingAutoencoder(object):
             if self.num_epochs!=0 and (i+1) % self.verbose_step != 0:
                 self._run_validation_error_and_summaries(i+1, validation_set, validation_set_label)
 
-    def _run_train_step(self, train_set, train_set_label, corruption_ratio):
+    def _run_train_step(self, train_set, train_set_label, corruption_ratio, epoch):
 
         """ Run a training step. A training step is made by randomly corrupting the training set,
         randomly shuffling it,  divide it into batches and run the optimizer for each batch.
@@ -218,6 +219,7 @@ class DenoisingAutoencoder(object):
 
         batches = [_ for _ in utils.gen_batches(train_set, x_corrupted, self.batch_size, data_label=train_set_label)]
 
+        i = 1
         for batch in batches:
             if train_set_label is not None: x_batch, x_corr_batch, x_batch_label = batch
             else: x_batch, x_corr_batch = batch
@@ -228,15 +230,20 @@ class DenoisingAutoencoder(object):
                 tr_feed = {self.input_data: x_batch, self.input_data_corr: x_corr_batch, self.input_label: x_batch_label}
 
             if self.triplet_strategy != 'none':
-                step, train_autoencoder_loss, train_triplet_loss, train_cost, fraction_triplet, num_triplet = self.tf_session.run([self.train_step, self.autoencoder_loss, self.triplet_loss, self.cost, self.fraction_triplet, self.num_triplet], feed_dict=tr_feed)
+                summary, step, train_autoencoder_loss, train_triplet_loss, train_cost, fraction_triplet, num_triplet = self.tf_session.run([self.tf_merged_summaries, self.train_step, self.autoencoder_loss, self.triplet_loss, self.cost, self.fraction_triplet, self.num_triplet], feed_dict=tr_feed)
+                self.train_summary = summary
                 self.train_cost_batch[0].append(train_cost)
                 self.train_cost_batch[1].append(train_autoencoder_loss)
                 self.train_cost_batch[2].append(train_triplet_loss)
                 self.fraction_triplet_batch.append(fraction_triplet)
                 self.num_triplet_batch.append(num_triplet)
             else:
-                step, train_cost = self.tf_session.run([self.train_step,self.cost], feed_dict=tr_feed)
+                summary, step, train_cost = self.tf_session.run([self.tf_merged_summaries, self.train_step,self.cost], feed_dict=tr_feed)
+                self.train_summary = summary
                 self.train_cost_batch[0].append(train_cost)
+
+            self.tf_summary_writer.add_summary(self.train_summary, (epoch - 1) * len(batches) + i)
+            i += 1
 
     def _corrupt_input(self, data, v):
 
@@ -302,7 +309,7 @@ class DenoisingAutoencoder(object):
             result = self.tf_session.run([self.tf_merged_summaries, self.cost], feed_dict=vl_feed)
 
         summary_str = result[0]
-        self.tf_summary_writer.add_summary(summary_str, epoch)
+        self.tf_validation_summary_writer.add_summary(summary_str, epoch)
 
         if self.verbose:
             print("[Validation Stat (at this step)] - Cost: ")
@@ -369,7 +376,7 @@ class DenoisingAutoencoder(object):
 
         _matmul = tf.sparse.matmul if self.sparse_input else tf.matmul
 
-        with tf.name_scope("W_x_bh"):
+        with tf.name_scope("Encode"):
             if self.enc_act_func == 'sigmoid':
                 _enc_act_func = tf.nn.sigmoid
 
@@ -381,13 +388,17 @@ class DenoisingAutoencoder(object):
 
             self.encode = _enc_act_func(_matmul(self.input_data_corr, self.W_) + self.bh_) - _enc_act_func(self.bh_)
 
+            tf.summary.histogram('weights', self.W_)
+            tf.summary.histogram('bias', self.bh_)
+            tf.summary.histogram('embeddings', self.encode)
+
     def _create_decode_layer(self):
 
         """ Create the decoding layer of the network.
         :return: self
         """
 
-        with tf.name_scope("Wg_y_bv"):
+        with tf.name_scope("Decode"):
             if self.dec_act_func == 'sigmoid':
                 _dec_act_func = tf.nn.sigmoid
 
@@ -397,7 +408,11 @@ class DenoisingAutoencoder(object):
             else:
                 _dec_act_func = lambda x: x
 
-        self.decode = _dec_act_func(tf.matmul(self.encode, tf.transpose(self.W_)) + self.bv_)
+            self.decode = _dec_act_func(tf.matmul(self.encode, tf.transpose(self.W_)) + self.bv_)
+
+            tf.summary.histogram('weights', tf.transpose(self.W_))
+            tf.summary.histogram('bias', self.bv_)
+            tf.summary.histogram('decodings', self.decode)
 
     def _create_cost_function_node(self):
 
@@ -413,16 +428,18 @@ class DenoisingAutoencoder(object):
                     _triplet_loss = batch_hard_triplet_loss
 
                 self.triplet_loss, data_weight, self.fraction_triplet, self.num_triplet = _triplet_loss(self.sparse_input, self.input_label, self.encode,)
-                _ = tf.summary.scalar(self.triplet_strategy, self.triplet_loss)
+                tf.summary.scalar('triplet_' + self.triplet_strategy, self.triplet_loss)
 
                 self.autoencoder_loss = weighted_loss(self.sparse_input, self.input_data, self.decode, loss_func=self.loss_func, weight=data_weight)
-                _ = tf.summary.scalar(self.loss_func, self.autoencoder_loss)
+                tf.summary.scalar('autoencoder_' + self.loss_func, self.autoencoder_loss)
+
+                tf.summary.scalar('alpha', self.alpha)
 
                 self.cost = self.autoencoder_loss + self.alpha * self.triplet_loss
-                _ = tf.summary.scalar("overall_cost", self.cost)
+                tf.summary.scalar('overall', self.cost)
             else:
                 self.cost = weighted_loss(self.sparse_input, self.input_data, self.decode,loss_func=self.loss_func)
-                _ = tf.summary.scalar(self.loss_func, self.cost)
+                tf.summary.scalar('autoencoder_' + self.loss_func, self.cost)
 
     def _create_train_step_node(self):
 
@@ -456,6 +473,8 @@ class DenoisingAutoencoder(object):
 
             else:
                 self.train_step = None
+
+        tf.summary.scalar('Learning rate', self.learning_rate)
 
     def transform(self, data, name='train', save=False):
         """ Transform data according to the model.

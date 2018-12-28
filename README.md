@@ -23,10 +23,16 @@ Python version = 3.6.7
 
 ```shell
 # to train a new model
-python main_autoencoder.py --model_name dae_triplet --verbose --encode_full
+python main_autoencoder.py --model_name HelloWorld --verbose --encode_full
 
 # to reuse previous model and previous training data and continue training
-python main_autoencoder.py --model_name dae_triplet --verbose --encode_full --restore_previous_model --restore_previous_data
+python main_autoencoder.py --model_name HelloWorld --verbose --encode_full --restore_previous_model --restore_previous_data
+```
+
+Monitor training in tensorboard
+
+```shell
+tensorboard --logdir results/dae/HelloWorld/logs
 ```
 
 ---

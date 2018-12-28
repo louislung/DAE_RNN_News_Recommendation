@@ -23,6 +23,7 @@ flags.DEFINE_boolean('encode_full', False, 'Whether to encode and store the full
 flags.DEFINE_boolean('validation', False, 'Whether to use a validation set and print validation loss')
 flags.DEFINE_string('input_format', 'binary', 'Input data format. ["binary", "tfidf"]')
 flags.DEFINE_string('label', 'category_publish_name', 'Input data format. ["category_publish_name", "title_group"]')
+flags.DEFINE_boolean('save_tsv', False, 'Whether to save data in tsv format')
 
 # Count Vectorizer parameters
 flags.DEFINE_boolean('restore_previous_data', False, 'If true, restore previous data corresponding to model name')
@@ -189,14 +190,6 @@ if __name__ == '__main__':
         helpers.save_file(X_tfidf, model.data_dir + 'article_tfidf_vectorized.npz')
         helpers.save_file(X_tfidf_validate, model.data_dir + 'article_tfidf_vectorized_validate.npz')
 
-        # Save in tsv format for visualization in tensorboard (http://projector.tensorflow.org/)
-        helpers.save_file(X_tfidf, model.tsv_dir + 'article_tfidf_vectorized.tsv')
-        helpers.save_file(X_tfidf_validate, model.tsv_dir + 'article_tfidf_vectorized_validate.tsv')
-        helpers.save_file(X, model.tsv_dir + 'article_binary_count_vectorized.tsv')
-        helpers.save_file(X_validate, model.tsv_dir + 'article_binary_count_vectorized_validate.tsv')
-        helpers.save_file(article_contents.iloc[0:train_row,][['label_title_group', 'label_category_publish_name', 'title', 'title_group', 'category_publish_name']], model.tsv_dir + 'article_label.tsv')
-        helpers.save_file(article_contents.iloc[train_row:validate_row+train_row,][['label_title_group', 'label_category_publish_name', 'title', 'title_group','category_publish_name']], model.tsv_dir + 'article_label_validate.tsv')
-
         # Save vectorizer
         joblib.dump(count_vectorizer, model.data_dir + 'count_vectorizer.joblib')
         joblib.dump(tfidf_transformer, model.data_dir + 'tfidf_transformer.joblib')
@@ -244,8 +237,17 @@ if __name__ == '__main__':
     # Encode the data and store it
     X_encoded = model.transform(utils.decay_noise(data_dict[FLAGS.input_format ]['train'], FLAGS.corr_frac), name='article_encoded', save=FLAGS.encode_full)
     X_encoded_validate = model.transform(utils.decay_noise(data_dict[FLAGS.input_format ]['validate'], FLAGS.corr_frac), name='article_encoded_validate', save=FLAGS.encode_full)
-    helpers.save_file(X_encoded, model.tsv_dir + 'article_encoded.tsv')
-    helpers.save_file(X_encoded_validate, model.tsv_dir + 'article_encoded_validate.tsv')
+
+    if FLAGS.save_tsv:
+        # Save in tsv format for visualization in tensorboard (http://projector.tensorflow.org/)
+        helpers.save_file(X_tfidf, model.tsv_dir + 'article_tfidf_vectorized.tsv')
+        helpers.save_file(X_tfidf_validate, model.tsv_dir + 'article_tfidf_vectorized_validate.tsv')
+        helpers.save_file(X, model.tsv_dir + 'article_binary_count_vectorized.tsv')
+        helpers.save_file(X_validate, model.tsv_dir + 'article_binary_count_vectorized_validate.tsv')
+        helpers.save_file(article_contents.iloc[0:train_row, ][['label_title_group', 'label_category_publish_name', 'title', 'title_group', 'category_publish_name']], model.tsv_dir + 'article_label.tsv')
+        helpers.save_file(article_contents.iloc[train_row:validate_row + train_row, ][['label_title_group', 'label_category_publish_name', 'title', 'title_group', 'category_publish_name']], model.tsv_dir + 'article_label_validate.tsv')
+        helpers.save_file(X_encoded, model.tsv_dir + 'article_encoded.tsv')
+        helpers.save_file(X_encoded_validate, model.tsv_dir + 'article_encoded_validate.tsv')
 
     #################################
     # Calculate pairwise similarity #

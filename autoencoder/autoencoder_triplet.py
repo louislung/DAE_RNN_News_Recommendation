@@ -92,7 +92,7 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
             self.train_cost_batch = [], [], []
             train_start_time = time.time()
 
-            self._run_train_step(train_set, corruption_ratio)
+            self._run_train_step(train_set, corruption_ratio, i+1)
 
             self.train_time = time.time() - train_start_time
 
@@ -103,7 +103,7 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
             if self.num_epochs!=0 and (i+1) % self.verbose_step != 0:
                 self._run_validation_error_and_summaries(i+1, validation_set)
 
-    def _run_train_step(self, train_set, corruption_ratio):
+    def _run_train_step(self, train_set, corruption_ratio, epoch):
 
         """ Run a training step. A training step is made by randomly corrupting the training set,
         randomly shuffling it,  divide it into batches and run the optimizer for each batch.
@@ -120,6 +120,7 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
 
         batches = [_ for _ in utils.gen_batches_triplet(train_set, x_corrupted, self.batch_size)]
 
+        i = 1
         for batch in batches:
             x_batch, x_corr_batch = batch
             if self.sparse_input:
@@ -141,6 +142,9 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
             self.train_cost_batch[0].append(train_cost)
             self.train_cost_batch[1].append(train_autoencoder_loss)
             self.train_cost_batch[2].append(train_triplet_loss)
+
+            self.tf_summary_writer.add_summary(self.train_summary, (epoch - 1) * len(batches) + i)
+            i += 1
 
     def _run_validation_error_and_summaries(self, epoch, validation_set):
 
@@ -185,7 +189,7 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
         result = self.tf_session.run([self.tf_merged_summaries, self.cost, self.autoencoder_loss, self.triplet_loss], feed_dict=vl_feed)
 
         summary_str = result[0]
-        self.tf_summary_writer.add_summary(summary_str, epoch)
+        self.tf_validation_summary_writer.add_summary(summary_str, epoch)
 
         if self.verbose:
             print("[Validation Stat (at this step)] - Cost: ", end='')
@@ -239,7 +243,7 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
 
         _matmul = tf.sparse.matmul if self.sparse_input else tf.matmul
 
-        with tf.name_scope("W_x_bh"):
+        with tf.name_scope("Encode"):
             if self.enc_act_func == 'sigmoid':
                 _enc_act_func = tf.nn.sigmoid
 
@@ -253,13 +257,19 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
             self.encode_pos = _enc_act_func(_matmul(self.input_data_corr_pos, self.W_) + self.bh_) - _enc_act_func(self.bh_)
             self.encode_neg = _enc_act_func(_matmul(self.input_data_corr_neg, self.W_) + self.bh_) - _enc_act_func(self.bh_)
 
+            tf.summary.histogram('weights', self.W_)
+            tf.summary.histogram('bias', self.bh_)
+            tf.summary.histogram('embeddings_anchor', self.encode)
+            tf.summary.histogram('embeddings_pos', self.encode_pos)
+            tf.summary.histogram('embeddings_neg', self.encode_neg)
+
     def _create_decode_layer(self):
 
         """ Create the decoding layer of the network.
         :return: self
         """
 
-        with tf.name_scope("Wg_y_bv"):
+        with tf.name_scope("Decode"):
             if self.dec_act_func == 'sigmoid':
                 _dec_act_func = tf.nn.sigmoid
                 self.decode = tf.nn.sigmoid
@@ -277,6 +287,12 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
             self.decode_pos = _dec_act_func(tf.matmul(self.encode_pos, tf.transpose(self.W_)) + self.bv_)
             self.decode_neg = _dec_act_func(tf.matmul(self.encode_neg, tf.transpose(self.W_)) + self.bv_)
 
+            tf.summary.histogram('weights', tf.transpose(self.W_))
+            tf.summary.histogram('bias', self.bv_)
+            tf.summary.histogram('decodings_anchor', self.decode)
+            tf.summary.histogram('decodings_pos', self.decode_pos)
+            tf.summary.histogram('decodings_neg', self.decode_neg)
+
     def _create_cost_function_node(self):
 
         """ create the cost function node of the network.
@@ -287,13 +303,13 @@ class DenoisingAutoencoderTriplet(DenoisingAutoencoder):
             self.autoencoder_loss = weighted_loss(self.sparse_input, self.input_data, self.decode, loss_func=self.loss_func) + \
                                     weighted_loss(self.sparse_input, self.input_data_pos, self.decode_pos, loss_func=self.loss_func) + \
                                     weighted_loss(self.sparse_input, self.input_data_neg, self.decode_neg, loss_func=self.loss_func)
-            _ = tf.summary.scalar(self.loss_func, self.autoencoder_loss)
+            tf.summary.scalar('autoencoder_' + self.loss_func, self.autoencoder_loss)
 
             self.triplet_loss = tf.reduce_mean(-tf.log_sigmoid(tf.reduce_sum(
                 (self.encode * self.encode_pos) -
                 (self.encode * self.encode_neg)
                 , 1)))
-            _ = tf.summary.scalar('triplet', self.triplet_loss)
+            tf.summary.scalar('triplet', self.triplet_loss)
 
             self.cost = self.autoencoder_loss + self.alpha * self.triplet_loss
-            _ = tf.summary.scalar("overall_cost", self.cost)
+            tf.summary.scalar("overall", self.cost)
