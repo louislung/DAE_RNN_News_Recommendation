@@ -4,10 +4,17 @@ import datasets.articles as articles
 import helpers
 from autoencoder import utils
 from pathlib import Path
+import dotenv
 
 
 # Define path
 _script_path = Path(os.path.dirname(os.path.realpath(__file__)))
+
+# Read dotenv
+dot_env_path = _script_path / '.env'
+if dot_env_path.exists():
+    print('.env found, will override all flags using values in .env')
+    dotenv.load_dotenv(dot_env_path)
 
 
 # #################### #
@@ -22,14 +29,25 @@ flags.DEFINE_integer('verbose_step', 5, 'Print log every x training steps')
 flags.DEFINE_boolean('encode_full', False, 'Whether to encode and store the full data set')
 flags.DEFINE_boolean('validation', False, 'Whether to use a validation set and print validation loss')
 flags.DEFINE_string('input_format', 'binary', 'Input data format. ["binary", "tfidf"]')
-flags.DEFINE_string('label', 'category_publish_name', 'Input data format. ["category_publish_name", "title_group"]')
+flags.DEFINE_string('label', 'category_publish_name', 'Input data format. ["category_publish_name", "story"]')
 flags.DEFINE_boolean('save_tsv', False, 'Whether to save data in tsv format')
+if 'verbose' in os.environ: FLAGS.verbose = True
+if 'verbose_step' in os.environ: FLAGS.verbose_step = int(os.environ['verbose_step'])
+if 'encode_full' in os.environ: FLAGS.encode_full = True
+if 'validation' in os.environ: FLAGS.validation = True
+if 'input_format' in os.environ: FLAGS.input_format = os.environ['input_format']
+if 'label' in os.environ: FLAGS.label = os.environ['label']
+if 'save_tsv' in os.environ: FLAGS.save_tsv = True
 
 # Count Vectorizer parameters
 flags.DEFINE_boolean('restore_previous_data', False, 'If true, restore previous data corresponding to model name')
 flags.DEFINE_float('min_df', 0, 'min_df for sklearn CountVectorizer')
 flags.DEFINE_float('max_df', 0.99, 'max_df for sklearn CountVectorizer')
 flags.DEFINE_integer('max_features', 10000, 'max_features for sklearn CountVectorizer')
+if 'restore_previous_data' in os.environ: FLAGS.restore_previous_data = True
+if 'min_df' in os.environ: FLAGS.min_df = float(os.environ['min_df'])
+if 'max_df' in os.environ: FLAGS.max_df = float(os.environ['max_df'])
+if 'max_features' in os.environ: FLAGS.max_features = int(os.environ['max_features'])
 
 # Stacked Denoising Autoencoder specific parameters
 flags.DEFINE_string('model_name', '', 'Model name.')
@@ -50,6 +68,24 @@ flags.DEFINE_integer('num_epochs', 50, 'Number of epochs, set to 0 will not trai
 flags.DEFINE_float('batch_size', 0.1, 'Size of each mini-batch.')
 flags.DEFINE_float('alpha', 1, 'hyper parameter for balancing similarity in loss function')
 flags.DEFINE_string('triplet_strategy', 'batch_all', 'triplet strategy ["batch_all","batch_hard","none"]')
+if 'model_name' in os.environ: FLAGS.model_name = os.environ['model_name']
+if 'restore_previous_model' in os.environ: FLAGS.restore_previous_model = True
+if 'seed' in os.environ: FLAGS.seed = int(os.environ['seed'])
+if 'compress_factor' in os.environ: FLAGS.compress_factor = int(os.environ['compress_factor'])
+if 'corr_type' in os.environ: FLAGS.corr_type = os.environ['compress_factor']
+if 'corr_frac' in os.environ: FLAGS.corr_frac = float(os.environ['compress_factor'])
+if 'xavier_init' in os.environ: FLAGS.xavier_init = int(os.environ['xavier_init'])
+if 'enc_act_func' in os.environ: FLAGS.enc_act_func = os.environ['enc_act_func']
+if 'dec_act_func' in os.environ: FLAGS.dec_act_func = os.environ['dec_act_func']
+if 'main_dir' in os.environ: FLAGS.main_dir = os.environ['main_dir']
+if 'loss_func' in os.environ: FLAGS.loss_func = os.environ['loss_func']
+if 'opt' in os.environ: FLAGS.opt = os.environ['opt']
+if 'learning_rate' in os.environ: FLAGS.learning_rate = float(os.environ['learning_rate'])
+if 'momentum' in os.environ: FLAGS.momentum = float(os.environ['momentum'])
+if 'num_epochs' in os.environ: FLAGS.num_epochs = int(os.environ['num_epochs'])
+if 'batch_size' in os.environ: FLAGS.batch_size = float(os.environ['batch_size'])
+if 'alpha' in os.environ: FLAGS.alpha = float(os.environ['alpha'])
+if 'triplet_strategy' in os.environ: FLAGS.triplet_strategy = os.environ['triplet_strategy']
 
 assert 0. <= FLAGS.min_df <= 1.
 assert 0. <= FLAGS.max_df <= 1.
@@ -63,7 +99,7 @@ assert FLAGS.opt in ['gradient_descent', 'ada_grad', 'momentum']
 assert FLAGS.verbose_step > 0
 assert FLAGS.triplet_strategy in ['batch_all','batch_hard','none']
 assert FLAGS.input_format in ['binary','tfidf']
-assert FLAGS.label in ['category_publish_name','title_group']
+assert FLAGS.label in ['category_publish_name','story']
 
 if FLAGS.input_format == 'tfidf':
     assert FLAGS.loss_func in ['mean_squared', 'cosine_proximity']
@@ -113,7 +149,7 @@ if __name__ == '__main__':
 
     # set row
     train_row = 1000
-    validate_row = 10000
+    validate_row = 20000
 
     ###########################
     # prepare or restore data #
@@ -126,8 +162,8 @@ if __name__ == '__main__':
         X_validate = helpers.read_file(model.data_dir + 'article_binary_count_vectorized_validate.npz')
         X_label_category_publish_name = helpers.read_file(model.data_dir + 'article_label_category_publish_name.pkl', data_type='pandas_series')
         X_label_category_publish_name_validate = helpers.read_file(model.data_dir + 'article_label_category_publish_name_validate.pkl', data_type='pandas_series')
-        X_label_title_group = helpers.read_file(model.data_dir + 'article_label_title_group.pkl', data_type='pandas_series')
-        X_label_title_group_validate = helpers.read_file(model.data_dir + 'article_label_title_group_validate.pkl', data_type='pandas_series')
+        X_label_story = helpers.read_file(model.data_dir + 'article_label_story.pkl', data_type='pandas_series')
+        X_label_story_validate = helpers.read_file(model.data_dir + 'article_label_story_validate.pkl', data_type='pandas_series')
         X_tfidf = helpers.read_file(model.data_dir + 'article_tfidf_vectorized.npz')
         X_tfidf_validate = helpers.read_file(model.data_dir + 'article_tfidf_vectorized_validate.npz')
         count_vectorizer = joblib.load(model.data_dir + 'count_vectorizer.joblib')
@@ -135,14 +171,15 @@ if __name__ == '__main__':
 
     else:
         article_contents = articles.read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/latest.snappy.parquet')
+        article_contents.sort_index(ascending=False, inplace=True)
 
         # get valid title group
-        title_group_value_counts = article_contents.title_group.value_counts()
-        title_group_indices = article_contents.title_group.isin(title_group_value_counts[(title_group_value_counts >= 2) & (title_group_value_counts <= 100)].index)
-        title_group_indices = title_group_indices & ~title_group_indices.isin(['有片','多圖','今日天氣','影片','01影像','熱評','多圖有片','多相','片','有圖慎入'])
-        article_contents['label_title_group_valid'] = 0
-        article_contents.loc[title_group_indices, 'label_title_group_valid'] = 1
-        article_contents['label_title_group'] = pd.factorize(article_contents.title_group)[0]
+        story_value_counts = article_contents.story.value_counts()
+        story_indices = article_contents.story.isin(story_value_counts[(story_value_counts >= 2) & (story_value_counts <= 200)].index)
+        story_indices = story_indices & ~story_indices.isin(['有片','多圖','今日天氣','影片','01影像','熱評','多圖有片','多相','片','有圖慎入','恭喜'])
+        article_contents['label_story_valid'] = 0
+        article_contents.loc[story_indices, 'label_story_valid'] = 1
+        article_contents['label_story'] = pd.factorize(article_contents.story)[0]
 
         # get valid category
         def update_cate(cate_str):
@@ -157,8 +194,13 @@ if __name__ == '__main__':
         if FLAGS.triplet_strategy != 'none':
             article_contents = article_contents.loc[article_contents['label_' + FLAGS.label + '_valid'] == 1,]
 
+        article_contents = article_contents.iloc[0:train_row + validate_row].sample(frac=1)
+
         count_vectorizer, X, X_pos, X_neg = articles.count_vectorize(
             article_contents.main_content[0:train_row],
+            # For english dataset e.g. uci-news only
+            # tokenizer=None,
+            # stop_words='english',
             min_df=FLAGS.min_df,
             max_df=FLAGS.max_df,
             max_features=FLAGS.max_features,
@@ -171,16 +213,16 @@ if __name__ == '__main__':
 
         X_label_category_publish_name = article_contents.label_category_publish_name[0:train_row]
         X_label_category_publish_name_validate = article_contents.label_category_publish_name[train_row:validate_row+train_row]
-        X_label_title_group = article_contents.label_title_group[0:train_row]
-        X_label_title_group_validate = article_contents.label_title_group[train_row:validate_row+train_row]
+        X_label_story = article_contents.label_story[0:train_row]
+        X_label_story_validate = article_contents.label_story[train_row:validate_row+train_row]
 
         # Save training & validation data
         helpers.save_file(article_contents.iloc[0:train_row, ], model.data_dir + 'article.snappy.parquet')
         helpers.save_file(article_contents.iloc[train_row:validate_row+train_row,], model.data_dir + 'article_validate.snappy.parquet')
         helpers.save_file(X_label_category_publish_name, model.data_dir + 'article_label_category_publish_name.pkl')
         helpers.save_file(X_label_category_publish_name_validate, model.data_dir + 'article_label_category_publish_name_validate.pkl')
-        helpers.save_file(X_label_title_group, model.data_dir + 'article_label_title_group.pkl')
-        helpers.save_file(X_label_title_group_validate, model.data_dir + 'article_label_title_group_validate.pkl')
+        helpers.save_file(X_label_story, model.data_dir + 'article_label_story.pkl')
+        helpers.save_file(X_label_story_validate, model.data_dir + 'article_label_story_validate.pkl')
         helpers.save_file(X, model.data_dir + 'article_count_vectorized.npz')
         helpers.save_file(X_validate, model.data_dir + 'article_count_vectorized_validate.npz')
         X.data = np.array([1] * len(X.data))
@@ -207,9 +249,9 @@ if __name__ == '__main__':
             'train': X_label_category_publish_name,
             'validate': X_label_category_publish_name_validate,
         },
-        'label_title_group': {
-            'train': X_label_title_group,
-            'validate': X_label_title_group_validate,
+        'label_story': {
+            'train': X_label_story,
+            'validate': X_label_story_validate,
         },
     }
 
@@ -232,6 +274,8 @@ if __name__ == '__main__':
         print('validate_row={}'.format(validate_row), file=text_file)
         print('input_format={}'.format(FLAGS.input_format), file=text_file)
         print('label={}'.format(FLAGS.label), file=text_file)
+        print('restore_previous_data={}'.format(FLAGS.restore_previous_data), file=text_file)
+        print('restore_previous_model={}'.format(FLAGS.restore_previous_model), file=text_file)
     print('fit done')
 
     # Encode the data and store it
@@ -244,8 +288,8 @@ if __name__ == '__main__':
         helpers.save_file(X_tfidf_validate, model.tsv_dir + 'article_tfidf_vectorized_validate.tsv')
         helpers.save_file(X, model.tsv_dir + 'article_binary_count_vectorized.tsv')
         helpers.save_file(X_validate, model.tsv_dir + 'article_binary_count_vectorized_validate.tsv')
-        helpers.save_file(article_contents.iloc[0:train_row, ][['label_title_group', 'label_category_publish_name', 'title', 'title_group', 'category_publish_name']], model.tsv_dir + 'article_label.tsv')
-        helpers.save_file(article_contents.iloc[train_row:validate_row + train_row, ][['label_title_group', 'label_category_publish_name', 'title', 'title_group', 'category_publish_name']], model.tsv_dir + 'article_label_validate.tsv')
+        helpers.save_file(article_contents.iloc[0:train_row, ][['label_story', 'label_category_publish_name', 'title', 'story', 'category_publish_name']], model.tsv_dir + 'article_label.tsv')
+        helpers.save_file(article_contents.iloc[train_row:validate_row + train_row, ][['label_story', 'label_category_publish_name', 'title', 'story', 'category_publish_name']], model.tsv_dir + 'article_label_validate.tsv')
         helpers.save_file(X_encoded, model.tsv_dir + 'article_encoded.tsv')
         helpers.save_file(X_encoded_validate, model.tsv_dir + 'article_encoded_validate.tsv')
 
@@ -271,8 +315,8 @@ if __name__ == '__main__':
     # Plot graph and save #
     #######################
     print('plot')
-    for labels in ['label_category_publish_name', 'label_title_group']:
-        suffix = '(Category)' if labels == 'label_category_publish_name' else '(Title Group)'
+    for labels in ['label_category_publish_name', 'label_story']:
+        suffix = '(Category)' if labels == 'label_category_publish_name' else '(Story)'
         helpers.visualize_pairwise_similarity(data_dict[labels]['train'], article_tfidf_cosine_sim, plot='boxplot',
                                               title='Cosine Similarity (TFIDF Vectorized) (Training Data)' + suffix,
                                               save_path=model.plot_dir + 'similarity_boxplot_tfidf' + suffix + '.png')
@@ -309,5 +353,6 @@ if __name__ == '__main__':
         print()
 
     print(__file__ + ': End')
+
 
 

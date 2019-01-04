@@ -22,7 +22,7 @@ flags.DEFINE_integer('verbose_step', 5, 'Print log every x training steps')
 flags.DEFINE_boolean('encode_full', False, 'Whether to encode and store the full data set')
 flags.DEFINE_boolean('validation', False, 'Whether to use a validation set and print validation loss')
 flags.DEFINE_string('input_format', 'binary', 'Input data format. ["binary", "tfidf"]')
-flags.DEFINE_string('label', 'category_publish_name', 'Input data format. ["category_publish_name", "title_group"]')
+flags.DEFINE_string('label', 'category_publish_name', 'Input data format. ["category_publish_name", "story"]')
 flags.DEFINE_boolean('save_tsv', False, 'Whether to save data in tsv format')
 
 # Count Vectorizer parameters
@@ -61,7 +61,7 @@ assert FLAGS.loss_func in ['cross_entropy', 'mean_squared', 'cosine_proximity']
 assert FLAGS.opt in ['gradient_descent', 'ada_grad', 'momentum']
 assert FLAGS.verbose_step > 0
 assert FLAGS.input_format in ['binary','tfidf']
-assert FLAGS.label in ['category_publish_name','title_group']
+assert FLAGS.label in ['category_publish_name','story']
 
 if FLAGS.input_format == 'tfidf':
     assert FLAGS.loss_func in ['mean_squared', 'cosine_proximity']
@@ -103,8 +103,8 @@ if __name__ == '__main__':
         X_validate_neg = helpers.read_file(model.data_dir + 'article_binary_count_vectorized_validate_neg.npz')
         X_label_category_publish_name = helpers.read_file(model.data_dir + 'article_label_category_publish_name.pkl', data_type='pandas_series')
         X_label_category_publish_name_validate = helpers.read_file(model.data_dir + 'article_label_category_publish_name_validate.pkl', data_type='pandas_series')
-        X_label_title_group = helpers.read_file(model.data_dir + 'article_label_title_group.pkl', data_type='pandas_series')
-        X_label_title_group_validate = helpers.read_file(model.data_dir + 'article_label_title_group_validate.pkl', data_type='pandas_series')
+        X_label_story = helpers.read_file(model.data_dir + 'article_label_story.pkl', data_type='pandas_series')
+        X_label_story_validate = helpers.read_file(model.data_dir + 'article_label_story_validate.pkl', data_type='pandas_series')
         X_tfidf = helpers.read_file(model.data_dir + 'article_tfidf_vectorized.npz')
         X_tfidf_pos = helpers.read_file(model.data_dir + 'article_tfidf_vectorized_pos.npz')
         X_tfidf_neg = helpers.read_file(model.data_dir + 'article_tfidf_vectorized_neg.npz')
@@ -118,12 +118,12 @@ if __name__ == '__main__':
         article_contents = articles.read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/latest.snappy.parquet')
 
         # get valid title group
-        title_group_value_counts = article_contents.title_group.value_counts()
-        title_group_indices = article_contents.title_group.isin(title_group_value_counts[(title_group_value_counts >= 2) & (title_group_value_counts <= 100)].index)
-        title_group_indices = title_group_indices & ~title_group_indices.isin(['有片', '多圖', '今日天氣', '影片', '01影像', '熱評', '多圖有片', '多相', '片', '有圖慎入'])
-        article_contents['label_title_group_valid'] = 0
-        article_contents.loc[title_group_indices, 'label_title_group_valid'] = 1
-        article_contents['label_title_group'] = pd.factorize(article_contents.title_group)[0]
+        story_value_counts = article_contents.story.value_counts()
+        story_indices = article_contents.story.isin(story_value_counts[(story_value_counts >= 2) & (story_value_counts <= 100)].index)
+        story_indices = story_indices & ~story_indices.isin(['有片', '多圖', '今日天氣', '影片', '01影像', '熱評', '多圖有片', '多相', '片', '有圖慎入'])
+        article_contents['label_story_valid'] = 0
+        article_contents.loc[story_indices, 'label_story_valid'] = 1
+        article_contents['label_story'] = pd.factorize(article_contents.story)[0]
 
         # get valid category
         def update_cate(cate_str):
@@ -162,16 +162,16 @@ if __name__ == '__main__':
 
         X_label_category_publish_name = article_contents.label_category_publish_name[0:train_row]
         X_label_category_publish_name_validate = article_contents.label_category_publish_name[train_row:validate_row + train_row]
-        X_label_title_group = article_contents.label_title_group[0:train_row]
-        X_label_title_group_validate = article_contents.label_title_group[train_row:validate_row + train_row]
+        X_label_story = article_contents.label_story[0:train_row]
+        X_label_story_validate = article_contents.label_story[train_row:validate_row + train_row]
 
         # Save training & validation data
         helpers.save_file(article_contents.iloc[0:train_row, ], model.data_dir + 'article.snappy.parquet')
         helpers.save_file(article_contents.iloc[train_row:validate_row + train_row, ], model.data_dir + 'article_validate.snappy.parquet')
         helpers.save_file(X_label_category_publish_name, model.data_dir + 'article_label_category_publish_name.pkl')
         helpers.save_file(X_label_category_publish_name_validate, model.data_dir + 'article_label_category_publish_name_validate.pkl')
-        helpers.save_file(X_label_title_group, model.data_dir + 'article_label_title_group.pkl')
-        helpers.save_file(X_label_title_group_validate, model.data_dir + 'article_label_title_group_validate.pkl')
+        helpers.save_file(X_label_story, model.data_dir + 'article_label_story.pkl')
+        helpers.save_file(X_label_story_validate, model.data_dir + 'article_label_story_validate.pkl')
         helpers.save_file(X, model.data_dir + 'article_count_vectorized.npz')
         helpers.save_file(X_validate, model.data_dir + 'article_count_vectorized_validate.npz')
         X.data = np.array([1] * len(X.data))
@@ -218,9 +218,9 @@ if __name__ == '__main__':
             'train': X_label_category_publish_name,
             'validate': X_label_category_publish_name_validate,
         },
-        'label_title_group': {
-            'train': X_label_title_group,
-            'validate': X_label_title_group_validate,
+        'label_story': {
+            'train': X_label_story,
+            'validate': X_label_story_validate,
         },
     }
 
@@ -252,8 +252,8 @@ if __name__ == '__main__':
         helpers.save_file(X_tfidf_validate, model.tsv_dir + 'article_tfidf_vectorized_validate.tsv')
         helpers.save_file(X, model.tsv_dir + 'article_binary_count_vectorized.tsv')
         helpers.save_file(X_validate, model.tsv_dir + 'article_binary_count_vectorized_validate.tsv')
-        helpers.save_file(article_contents.iloc[0:train_row, ][['label_title_group', 'label_category_publish_name', 'title', 'title_group', 'category_publish_name']], model.tsv_dir + 'article_label.tsv')
-        helpers.save_file(article_contents.iloc[train_row:validate_row + train_row, ][['label_title_group', 'label_category_publish_name', 'title', 'title_group', 'category_publish_name']], model.tsv_dir + 'article_label_validate.tsv')
+        helpers.save_file(article_contents.iloc[0:train_row, ][['label_story', 'label_category_publish_name', 'title', 'story', 'category_publish_name']], model.tsv_dir + 'article_label.tsv')
+        helpers.save_file(article_contents.iloc[train_row:validate_row + train_row, ][['label_story', 'label_category_publish_name', 'title', 'story', 'category_publish_name']], model.tsv_dir + 'article_label_validate.tsv')
         helpers.save_file(X_encoded, model.tsv_dir + 'article_encoded.tsv')
         helpers.save_file(X_encoded_validate, model.tsv_dir + 'article_encoded_validate.tsv')
 
@@ -279,8 +279,8 @@ if __name__ == '__main__':
     # Plot graph and save #
     #######################
     print('plot')
-    for labels in ['label_category_publish_name', 'label_title_group']:
-        suffix = '(Category)' if labels == 'label_category_publish_name' else '(Title Group)'
+    for labels in ['label_category_publish_name', 'label_story']:
+        suffix = '(Category)' if labels == 'label_category_publish_name' else '(Story)'
         helpers.visualize_pairwise_similarity(data_dict[labels]['train'], article_tfidf_cosine_sim, plot='boxplot',
                                               title='Cosine Similarity (TFIDF Vectorized) (Training Data)' + suffix,
                                               save_path=model.plot_dir + 'similarity_boxplot_tfidf' + suffix + '.png')
@@ -317,4 +317,5 @@ if __name__ == '__main__':
         print()
 
     print(__file__ + ': End')
+
 

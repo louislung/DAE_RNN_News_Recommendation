@@ -62,7 +62,8 @@ def read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/lat
     out_df = out_df[out_df.main_content.notna()]
 
     # Add column based on title, e.g. extract 食物設計 from 【食物設計（下）】
-    out_df['title_group'] = out_df.title.str.extract('【(.*?)[（|】]')
+    if 'story' not in out_df.columns:
+        out_df['story'] = out_df.title.str.extract('【(.*?)[（|】]')
 
     return out_df
 
