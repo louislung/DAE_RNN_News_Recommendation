@@ -96,29 +96,12 @@ def visualize_pairwise_similarity(labels, pairwise_similarity_metrics, plot='box
     unrelated_mask = sparse.coo_matrix(np.tril(np.logical_and(np.logical_not(mask), not_nan_mask), -1))
     unrelated_data = pairwise_similarity_metrics[unrelated_mask.row, unrelated_mask.col]
 
-    max_data_limit = int(1e7)
-    if len(related_data) > max_data_limit:
-        related_data = np.random.choice(related_data, max_data_limit,replace=False)
-    if len(unrelated_data) > max_data_limit:
-        unrelated_data = np.random.choice(unrelated_data, max_data_limit, replace=False)
-
-    # Boxplot
-    plt.figure(figsize=figsize)
-    plt.subplot(121)
-    if plot == 'scatter':
-        plt.scatter(['Related']*len(related_data), related_data, **plot_kwargs)
-        plt.scatter(['Unrelated']*len(unrelated_data), unrelated_data, **plot_kwargs)
-    elif plot == 'boxplot':
-        plt.boxplot([related_data,unrelated_data], **plot_kwargs)
-        plt.xticks([1,2],labels=['Related','Unrelated'])
-    if title is not None:
-        plt.title(title)
-
     # AUROC
     fpr, tpr, thresholds = roc_curve(['Related']*len(related_data) + ['Unrelated']*len(unrelated_data), list(related_data) + list(unrelated_data), pos_label='Related')
     auroc = auc(fpr, tpr)
 
-    plt.subplot(122)
+    plt.figure(figsize=figsize)
+    plt.subplot(121)
     lw = 2
     plt.plot(fpr, tpr, color='darkorange', lw=lw, label='ROC curve (area = %0.2f)' % auroc)
     plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
@@ -129,6 +112,23 @@ def visualize_pairwise_similarity(labels, pairwise_similarity_metrics, plot='box
     plt.legend(loc="lower right")
     if title is not None:
         plt.title('ROC - ' + title)
+
+    max_data_limit = int(1e7)
+    if len(related_data) > max_data_limit:
+        related_data = np.random.choice(related_data, max_data_limit, replace=False)
+    if len(unrelated_data) > max_data_limit:
+        unrelated_data = np.random.choice(unrelated_data, max_data_limit, replace=False)
+
+    # Boxplot
+    plt.subplot(122)
+    if plot == 'scatter':
+        plt.scatter(['Related'] * len(related_data), related_data, **plot_kwargs)
+        plt.scatter(['Unrelated'] * len(unrelated_data), unrelated_data, **plot_kwargs)
+    elif plot == 'boxplot':
+        plt.boxplot([related_data, unrelated_data], **plot_kwargs)
+        plt.xticks([1, 2], labels=['Related', 'Unrelated'])
+    if title is not None:
+        plt.title(title)
 
     # Save plot
     if save_path is not None:

@@ -24,6 +24,8 @@ flags.DEFINE_boolean('validation', False, 'Whether to use a validation set and p
 flags.DEFINE_string('input_format', 'binary', 'Input data format. ["binary", "tfidf"]')
 flags.DEFINE_string('label', 'category_publish_name', 'Input data format. ["category_publish_name", "story"]')
 flags.DEFINE_boolean('save_tsv', False, 'Whether to save data in tsv format')
+flags.DEFINE_integer('train_row', 8000, 'Number of training data to be used')
+flags.DEFINE_integer('validate_row', 2000, 'Number of validation data to be used')
 
 # Count Vectorizer parameters
 flags.DEFINE_boolean('restore_previous_data', False, 'If true, restore previous data corresponding to model name')
@@ -85,8 +87,8 @@ if __name__ == '__main__':
         alpha=FLAGS.alpha)
 
     # set row
-    train_row = 1000
-    validate_row = 10000
+    train_row = FLAGS.train_row
+    validate_row = FLAGS.validate_row
 
     ###########################
     # prepare or restore data #
@@ -117,10 +119,11 @@ if __name__ == '__main__':
     else:
         article_contents = articles.read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/latest.snappy.parquet')
 
-        # get valid title group
+        # get valid story
         story_value_counts = article_contents.story.value_counts()
-        story_indices = article_contents.story.isin(story_value_counts[(story_value_counts >= 2) & (story_value_counts <= 100)].index)
-        story_indices = story_indices & ~story_indices.isin(['有片', '多圖', '今日天氣', '影片', '01影像', '熱評', '多圖有片', '多相', '片', '有圖慎入'])
+        story_indices = article_contents.story.isin(story_value_counts[story_value_counts > 0].index)
+        # story_indices = article_contents.story.isin(story_value_counts[(story_value_counts >= 2) & (story_value_counts <= 100)].index)
+        # story_indices = story_indices & ~story_indices.isin(['有片', '多圖', '今日天氣', '影片', '01影像', '熱評', '多圖有片', '多相', '片', '有圖慎入'])
         article_contents['label_story_valid'] = 0
         article_contents.loc[story_indices, 'label_story_valid'] = 1
         article_contents['label_story'] = pd.factorize(article_contents.story)[0]
@@ -129,8 +132,9 @@ if __name__ == '__main__':
         def update_cate(cate_str):
             return cate_str.lstrip('即時')
         cate_value_counts = article_contents.category_publish_name.value_counts()
-        cate_indices = article_contents.category_publish_name.isin(cate_value_counts[cate_value_counts > 100].index)
-        cate_indices = cate_indices & ~cate_indices.isin(['突發', '熱話', '熱爆話題', '影片', '全部'])
+        cate_indices = article_contents.category_publish_name.isin(cate_value_counts[cate_value_counts > 0].index)
+        # cate_indices = article_contents.category_publish_name.isin(cate_value_counts[cate_value_counts > 100].index)
+        # cate_indices = cate_indices & ~cate_indices.isin(['突發', '熱話', '熱爆話題', '影片', '全部'])
         article_contents['label_category_publish_name_valid'] = 0
         article_contents.loc[cate_indices, 'label_category_publish_name_valid'] = 1
         article_contents['label_category_publish_name'] = pd.factorize(article_contents.category_publish_name.apply(update_cate))[0]
