@@ -1,6 +1,6 @@
-from scipy import misc, sparse
+from scipy import sparse
 import tensorflow as tf
-import numpy as np, os, time
+import numpy as np, os, pandas as pd
 from pathlib import Path
 
 
@@ -26,39 +26,64 @@ def xavier_init(fan_in, fan_out, const=1):
     return tf.random_uniform((fan_in, fan_out), minval=low, maxval=high)
     
 
-def gen_batches(data, data_corrupted, batch_size, sparse, data_label=None):
+def gen_batches(data, data_corrupted, batch_size, data_label=None, random=True):
     """ Divide input data into batches.
 
-    :param data: input sparse matrix #todo: handle pd dataframe as well? need to use data.iloc in yield
-    :param data_corrupted: input corrupted data
-    :param batch_size: size of each batch
-    :param sparse: whether input data is sparse matrix e.g. csr_matrix
+    :param data: input scipy sparse matrix / numpy array / pd DataFrame
+    :param data_corrupted: input corrupted data, same type as data
+    :param batch_size: size of each batch, (0,1] or integer >=1
+    :param data_label: label of data, pd DataFrame / pd Series / numpy 1-d, or 2-d array
 
     :return: data divided into batches
+
+    ..  note: data & data_corrupted must be of same type, but data_label can be any data type
     """
+    assert batch_size > 0.
     assert data.shape[0] == data_corrupted.shape[0]
+    assert type(data) == type(data_corrupted),(type(data), type(data_corrupted))
+    if isinstance(data, pd.DataFrame): assert (data.index == data_corrupted.index).all()
+    if data_label is not None: assert data_label.ndim == 1 or data_label.shape[1] == 1
+
+    if batch_size < 1.: batch_size = max(round(data.shape[0] * batch_size), 1)
+    batch_size = int(batch_size)
+
     index = list(range(0, data.shape[0]))
-    np.random.shuffle(index)
+    if random: np.random.shuffle(index)
 
     for i in range(0, data.shape[0], batch_size):
-        if data_label is None:
-            yield (data[index[i:i+batch_size],:], data_corrupted[index[i:i+batch_size],:])
+        if isinstance(data, pd.DataFrame):
+            batch_data = data.iloc[index[i:i + batch_size]]
+            batch_data_corrupted = data_corrupted.iloc[index[i:i + batch_size]]
+
         else:
-            yield (data[index[i:i + batch_size], :], data_corrupted[index[i:i + batch_size], :], data_label.iloc[index[i:i + batch_size]])
+            batch_data = data[index[i:i + batch_size]]
+            batch_data_corrupted = data_corrupted[index[i:i + batch_size]]
+
+        if data_label is not None:
+            if isinstance(data_label, pd.DataFrame) or isinstance(data_label, pd.Series):
+                batch_label = data_label.iloc[index[i:i + batch_size]]
+            else:
+                batch_label = data_label[index[i:i + batch_size]]
+            yield (batch_data, batch_data_corrupted, batch_label)
+
+        else:
+            yield (batch_data, batch_data_corrupted)
 
 
-def gen_batches_triplet(data, data_corrupted, batch_size, sparse, random=True):
+def gen_batches_triplet(data, data_corrupted, batch_size, random=True):
     """ Divide input data into batches.
 
-    :param data: dictionary of input data
+    :param data: dictionary of input data which can be sparse matrix / np 2-d array BUT NOT pd DataFrame
     :param data_corrupted: dictionary of input corrupted data
     :param batch_size: size of each batch
-    :param sparse: whether input data is sparse matrix e.g. csr_matrix
 
     :return: data divided into batches
     """
+    assert batch_size > 0.
     for key in data:
         assert data[key].shape[0] == data_corrupted[key].shape[0]
+
+    if batch_size < 1.: batch_size = max(round(data[key].shape[0] * batch_size), 1)
     index = list(range(0, data[key].shape[0]))
     if random: np.random.shuffle(index)
 
@@ -70,15 +95,17 @@ def masking_noise(X, v):
     """ Apply masking noise to data in X, in other words a fraction v of elements of X
     (chosen at random) is forced to zero.
 
-    :param X: array_like, Input data
-    :param v: int, fraction of elements to distort
+    :param X: np 2-d array or sparse matrix
+    :param v: float, corruption rate
 
     :return: transformed data
     """
+    assert 0. <= v <= 1.
+
     X_noise = X.tocoo(True) if not isinstance(X, np.ndarray) else X.copy()
 
     if isinstance(X, np.ndarray):
-        mask = np.random.choice(a=[False, True], size=X_noise.shape, p=[v, 1 - v])
+        mask = np.random.choice(a=[0, 1], size=X_noise.shape, p=[v, 1 - v])
         X_noise = mask * X_noise
     else:
         mask = np.random.rand(X_noise.nnz) >= v
@@ -121,25 +148,16 @@ def decay_noise(X, v):
     """ Apply decaying noise to data in X, in other words all elements of X is decayed by a fraction v
 
     :param X: array_like, Input data
-    :param v: int, fraction of elements to distort
+    :param v: float, corruption rate
 
     :return: transformed data
     """
     X_noise = X.copy()
 
-    X_noise = X_noise * v
+    X_noise = X_noise * (1. - v)
 
     return X_noise
 
-
-def gen_image(img, width, height, outfile, img_type='grey'):
-    assert len(img) == width * height or len(img) == width * height * 3
-
-    if img_type == 'grey':
-        misc.imsave(outfile, img.reshape(width, height))
-
-    elif img_type == 'color':
-        misc.imsave(outfile, img.reshape(3, width, height))
 
 def get_sparse_ind_val_shape(sparse_m):
     """ get indices, values, shape of a sparse matrix for feeding tf sparse placeholder
@@ -159,12 +177,5 @@ def get_sparse_ind_val_shape(sparse_m):
     values = sparse_m.data
     shape = sparse_m.shape
 
-    #indices = sparse_m.nonzero()
-    #values = np.array(sparse_m[indices]).reshape(-1)
-    #indices = np.matrix(indices).transpose()
-
     return (indices, values, shape)
 
-if __name__ == "__main__":
-    #todo: some automatic testing here
-    print('pending')

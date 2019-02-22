@@ -45,7 +45,7 @@ def tokenizer_chinese(text):
 
 
 def read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/latest.snappy.parquet'):
-    """ Read articles data and map a positive and a negative article for every article
+    """ Read articles data
 
     :param path: path of parquet to be read
 
@@ -62,7 +62,8 @@ def read_articles(path='/Users/user/Documents/hk01/cache/s3/article_contents/lat
     out_df = out_df[out_df.main_content.notna()]
 
     # Add column based on title, e.g. extract 食物設計 from 【食物設計（下）】
-    out_df['title_group'] = out_df.title.str.extract('【(.*?)[（|】]')
+    if 'story' not in out_df.columns:
+        out_df['story'] = out_df.title.str.extract('【(.*?)[（|】]')
 
     return out_df
 
@@ -143,7 +144,7 @@ def count_vectorize(in_series, in_pos_series=None, in_neg_series=None, tokenizer
     :return: CountVectorizer and output from CountVectorizer
     :rtype: csr_matrix
     """
-    count_vectorizer = CountVectorizer(tokenizer=tokenizer, **param_count_vectorizer) #todo: allows to restore count vectorizer
+    count_vectorizer = CountVectorizer(tokenizer=tokenizer, **param_count_vectorizer)
 
     X = count_vectorizer.fit_transform(in_series)
     # Only do transform for in_pos_series and in_neg_series so all output have same number of features (columns)
