@@ -2,6 +2,10 @@
 
 Refer to research [Embedding-based News Recommendation for Millions of Users](https://www.kdd.org/kdd2017/papers/view/embedding-based-news-recommendation-for-millions-of-users)  and [Article De-duplication Using Distributed Representations](http://gdac.uqam.ca/WWW2016-Proceedings/companion/p87.pdf) published by Yahoo! Japan which aims to use embeddings of articles and user to provide news recommendations.
 
+This repo contains code for training the article embeddings. And will include user embeddings in the future. 
+
+Please check this [blog post](https://medium.com/@LouisKitLungLaw/compute-document-similarity-using-autoencoder-with-triplet-loss-eb7eb132eb38) for more details about the article embeddings training.
+
 ---
 
 1. autoencoder.py contains code for normal denoising autoencoder (DAE) and DAE with triplet mining 
