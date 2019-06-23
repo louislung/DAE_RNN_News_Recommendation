@@ -1,0 +1,122 @@
+Arguments: 
+lr: 0.0001
+dim: 50
+epoch: 50
+maxTrainTime: 8640000
+validationPatience: 10
+saveEveryEpoch: 0
+loss: hinge
+margin: 0.05
+similarity: cosine
+maxNegSamples: 10
+negSearchLimit: 1
+batchSize: 5
+thread: 20
+minCount: 1
+minCountLabel: 1
+label: __label__
+label: __label__
+ngrams: 1
+bucket: 2000000
+adagrad: 1
+trainMode: 0
+fileFormat: fastText
+normalizeText: 0
+dropoutLHS: 0
+dropoutRHS: 0
+useWeight: 0
+weightSep: :
+Start to initialize starspace model.
+Build dict from input file : uci_train_starspace_formatted.txt
+Loading data from file : uci_train_starspace_formatted.txt
+Total number of examples loaded : 5000
+Loading data from file : uci_validate_starspace_formatted.txt
+Total number of examples loaded : 5348
+Training epoch 0: 0.0001 1.99998e-06
+
+ ---+++                Epoch    0 Train error : 0.07786298 +++--- ☃
+
+Validation error: 0.037679
+Training epoch 1: 9.8e-05 1.99998e-06
+
+ ---+++                Epoch    1 Train error : 0.01823104 +++--- ☃
+
+Validation error: 0.0282688
+Training epoch 2: 9.6e-05 1.99998e-06
+
+ ---+++                Epoch    2 Train error : 0.01226683 +++--- ☃
+
+Validation error: 0.024953
+Training epoch 3: 9.40001e-05 1.99998e-06
+
+ ---+++                Epoch    3 Train error : 0.00489852 +++--- ☃
+
+Validation error: 0.0229727
+Training epoch 4: 9.20001e-05 1.99998e-06
+
+ ---+++                Epoch    4 Train error : 0.00530905 +++--- ☃
+
+Validation error: 0.0242805
+Training epoch 5: 9.00001e-05 1.99998e-06
+
+ ---+++                Epoch    5 Train error : 0.00513338 +++--- ☃
+
+Validation error: 0.0230344
+Training epoch 6: 8.80001e-05 1.99998e-06
+
+ ---+++                Epoch    6 Train error : 0.00370637 +++--- ☃
+
+Validation error: 0.0234149
+Training epoch 7: 8.60001e-05 1.99998e-06
+
+ ---+++                Epoch    7 Train error : 0.00201579 +++--- ☃
+
+Validation error: 0.0205153
+Training epoch 8: 8.40002e-05 1.99998e-06
+
+ ---+++                Epoch    8 Train error : 0.00174218 +++--- ☃
+
+Validation error: 0.0227032
+Training epoch 9: 8.20002e-05 1.99998e-06
+
+ ---+++                Epoch    9 Train error : 0.00105643 +++--- ☃
+
+Validation error: 0.0208576
+Training epoch 10: 8.00002e-05 1.99998e-06
+
+ ---+++                Epoch   10 Train error : 0.00159247 +++--- ☃
+
+Validation error: 0.0170076
+Training epoch 11: 7.80002e-05 1.99998e-06
+
+ ---+++                Epoch   11 Train error : 0.00113401 +++--- ☃
+
+Validation error: 0.0203408
+Training epoch 12: 7.60003e-05 1.99998e-06
+
+ ---+++                Epoch   12 Train error : 0.00034062 +++--- ☃
+
+Validation error: 0.0204862
+Training epoch 13: 7.40003e-05 1.99998e-06
+
+ ---+++                Epoch   13 Train error : 0.00113903 +++--- ☃
+
+Validation error: 0.0207109
+Training epoch 14: 7.20003e-05 1.99998e-06
+
+ ---+++                Epoch   14 Train error : 0.00037766 +++--- ☃
+
+Validation error: 0.0205408
+Training epoch 15: 7.00003e-05 1.99998e-06
+
+ ---+++                Epoch   15 Train error : 0.00092367 +++--- ☃
+
+Validation error: 0.0191184
+Training epoch 16: 6.80003e-05 1.99998e-06
+
+ ---+++                Epoch   16 Train error : 0.00075201 +++--- ☃
+
+Validation error: 0.018963
+Ran out of Patience! Early stopping based on validation set.
+Saving model to file : uci_starspace
+Saving model in tsv format : uci_starspace.tsv
