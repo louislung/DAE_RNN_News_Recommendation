@@ -1,6 +1,6 @@
 joblib==0.12.5
 jieba==0.39
-numpy==1.15.3
+numpy==1.22.0
 tensorflow==1.12.0
 pytest==4.0.2
 pandas==0.23.4
