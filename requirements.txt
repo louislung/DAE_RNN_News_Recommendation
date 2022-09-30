@@ -1,4 +1,4 @@
-joblib==0.12.5
+joblib==1.2.0
 jieba==0.39
 numpy==1.15.3
 tensorflow==1.12.0
